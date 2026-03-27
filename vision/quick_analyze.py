@@ -9,7 +9,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from vision.gemini_client import GeminiVisionClient
+try:
+    from vision.gemini_client import GeminiVisionClient
+except ModuleNotFoundError:
+    # Support direct execution: python vision/quick_analyze.py
+    from gemini_client import GeminiVisionClient
 
 
 def capture_image_rpicam(output_path: Path) -> bool:
