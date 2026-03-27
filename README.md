@@ -11,7 +11,7 @@ This repository follows chunk-wise execution from C00 onward.
 3. Run C01 tooling verification:
    - `make smoke-c01`
 
-## C04, C05, and C06 Verification
+## C04, C05, C06, and C07 Verification
 
 1. Run vision smoke checks:
    - `make smoke-c04`
@@ -19,16 +19,20 @@ This repository follows chunk-wise execution from C00 onward.
    - `make smoke-c05`
 3. Run fusion and RUL smoke checks:
    - `make smoke-c06`
+4. Run UX/demo runtime orchestration checks:
+   - `make smoke-c07`
 
 Expected output lines:
 - `[PASS] C04 smoke checks passed`
 - `[PASS] C05 smoke checks passed`
 - `[PASS] C06 smoke checks passed`
+- `[PASS] C07 smoke checks passed`
 
 Artifacts:
 - `data/sessions/c04/c04-verification-summary.json`
 - `data/sessions/c05/c05-verification-summary.json`
 - `data/sessions/c06/c06-verification-summary.json`
+- `data/sessions/c07/c07-verification-summary.json`
 
 ## Top-Level Structure
 

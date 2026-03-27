@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-27T22:13:42.964199+00:00",
+  "timestamp": "2026-03-27T22:50:54.302803+00:00",
   "cycle_id": "robust_132",
-  "image_id": "img-9797622ee042",
+  "image_id": "img-38229ccb6856",
   "roi_info": {
     "x": 0.3,
     "y": 0.2,
@@ -29,9 +29,9 @@
   "degraded_mode": false,
   "fallback_reason": "",
   "capture_metadata": {
-    "timestamp": "2026-03-27T22:13:42.690429+00:00",
+    "timestamp": "2026-03-27T22:50:54.135311+00:00",
     "cycle_id": "robust_132",
-    "frame_id": "frame-29f01b679324",
+    "frame_id": "frame-1797f4bc16d4",
     "image_path": "/home/m0mspagetthi/corrosion/data/sessions/c04/captures/robust_132.jpg",
     "image_format": "jpeg",
     "still_width": 1920,
@@ -52,5 +52,5 @@
   },
   "model_version": "vision-c04-v1",
   "preprocessing_version": "pre-c04-v1",
-  "latency_ms": 275
+  "latency_ms": 168
 }

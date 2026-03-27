@@ -1,0 +1,36 @@
+{
+  "timestamp": "2026-03-27T22:50:21.984182+00:00",
+  "cycle_id": "c07-fresh_swap-002",
+  "phase": "fresh_swap",
+  "rp_ohm": 56000.0,
+  "current_ma": 0.16,
+  "sensor_status_band": "HEALTHY",
+  "vision_severity_0_to_10": 0.0,
+  "fused_severity_0_to_10": 1.32,
+  "rul_days": 320.78,
+  "confidence_0_to_1": 0.86,
+  "degraded_mode": false,
+  "stale": false,
+  "vision_quality_flags": [],
+  "paused": false,
+  "operator_controls": [
+    "pause",
+    "resume",
+    "recapture image",
+    "force recompute"
+  ],
+  "phase_markers": [
+    "baseline",
+    "acceleration",
+    "active",
+    "severe",
+    "fresh_swap"
+  ],
+  "disclaimer": "Educational prototype.",
+  "ui": {
+    "confidence_label": "HIGH",
+    "confidence_color": "ok",
+    "quality_label": "FRESH",
+    "quality_color": "ok"
+  }
+}

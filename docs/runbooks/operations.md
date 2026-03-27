@@ -49,6 +49,22 @@ Expected artifact:
 - `data/sessions/c06/c06-verification-summary.json`
 - Summary contains `"status": "pass"`
 
+## C07 UX and Demo Runtime Orchestration Verification
+
+1. Activate environment:
+   - `source .venv/bin/activate`
+2. Run C07 verification:
+   - `make smoke-c07`
+3. Optional direct run:
+   - `python scripts/verify_c07.py`
+
+Expected terminal output:
+- `[PASS] C07 smoke checks passed`
+
+Expected artifact:
+- `data/sessions/c07/c07-verification-summary.json`
+- Summary contains `"status": "pass"`
+
 ## Shutdown
 
 1. Stop services gracefully.
