@@ -1,0 +1,8 @@
+{
+  "chunk": "C01",
+  "status": "pass",
+  "artifacts": [
+    "data/sessions/c01/validation-summary-baseline.json",
+    "data/sessions/c01/validation-summary-polarity.json"
+  ]
+}

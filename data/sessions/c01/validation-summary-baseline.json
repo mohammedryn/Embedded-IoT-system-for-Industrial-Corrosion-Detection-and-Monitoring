@@ -1,0 +1,39 @@
+{
+  "chunk": "C01",
+  "status": "pass",
+  "checks": {
+    "waveform": {
+      "status": "pass",
+      "metrics": {
+        "peak_v": 0.010149,
+        "vpp_v": 0.020298,
+        "offset_v": 0.0,
+        "freq_hz": 0.095993,
+        "noise_std_v": 0.001759
+      },
+      "checks": {
+        "amplitude_ok": true,
+        "frequency_ok": true,
+        "expected_peak_v": 0.01,
+        "expected_freq_hz": 0.1
+      }
+    },
+    "adc": {
+      "status": "pass",
+      "metrics": {
+        "mean_v": 0.0045,
+        "std_v": 0.000141,
+        "peak_to_peak_v": 0.000399,
+        "correlation": "not_checked"
+      },
+      "checks": {
+        "std_ok": true,
+        "peak_to_peak_ok": true,
+        "polarity_ok": true,
+        "std_max_v": 0.0015,
+        "peak_to_peak_max_v": 0.01,
+        "expect_correlation": "none"
+      }
+    }
+  }
+}

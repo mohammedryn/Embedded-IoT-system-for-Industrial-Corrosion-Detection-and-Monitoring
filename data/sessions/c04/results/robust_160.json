@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-03-27T19:02:30.091126+00:00",
+  "cycle_id": "robust_160",
+  "image_id": "img-f491213b73d4",
+  "roi_info": {
+    "x": 0.3,
+    "y": 0.2,
+    "w": 0.4,
+    "h": 0.6
+  },
+  "rust_coverage_pct": 0.0,
+  "rust_coverage_band": "none",
+  "pitting_proxy_count": 0,
+  "pitting_severity_band": "none",
+  "surface_quality_class": "smooth",
+  "dominant_color_class": "gray_silver",
+  "morphology_class": "none",
+  "visual_severity_0_to_10": 0.0,
+  "confidence_0_to_1": 0.8,
+  "quality_flags": [],
+  "degraded_mode": false,
+  "fallback_reason": "",
+  "model_version": "vision-c04-v1",
+  "preprocessing_version": "pre-c04-v1",
+  "latency_ms": 301
+}

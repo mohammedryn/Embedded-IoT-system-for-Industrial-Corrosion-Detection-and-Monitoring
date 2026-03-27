@@ -1,0 +1,45 @@
+{
+  "chunk": "C04",
+  "timestamp": 1774638094.0922544,
+  "tests": {
+    "quality_blur_reject": {
+      "pass": true,
+      "evidence": "data/sessions/c04/results/t_blur.json"
+    },
+    "quality_exposure_reject": {
+      "pass": true,
+      "evidence": "data/sessions/c04/results/t_over.json, data/sessions/c04/results/t_under.json"
+    },
+    "valid_image_schema": {
+      "pass": true,
+      "evidence": "data/sessions/c04/results/t_clean_schema.json"
+    },
+    "degraded_mode_fallback": {
+      "pass": true,
+      "evidence": "data/sessions/c04/results/t_forced_fail.json"
+    },
+    "trend_sanity": {
+      "pass": true,
+      "clean_avg": 0.0,
+      "corroded_avg": 8.33,
+      "evidence": "data/sessions/c04/results/trend_*.json"
+    },
+    "latency_median_target": {
+      "pass": true,
+      "median_latency_ms": 243.5,
+      "target_ms": 8000,
+      "evidence": "data/sessions/c04/results/*.json"
+    },
+    "accelerated_robustness_simulation": {
+      "pass": true,
+      "cycles": 300,
+      "elapsed_seconds": 94.78,
+      "evidence": "data/sessions/c04/results/robust_*.json"
+    }
+  },
+  "status": "pass",
+  "limitations": [
+    "Physical 1-hour camera endurance on Pi HQ hardware not executed in CI; accelerated robustness simulation executed instead."
+  ],
+  "calibration_profile": "data/sessions/c04/calibration/locked_camera_profile.json"
+}

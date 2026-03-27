@@ -1,0 +1,12 @@
+project:
+  name: corrosion-monitor
+  mode: demo
+paths:
+  logs_dir: data/logs
+  sessions_dir: data/sessions
+  thresholds_file: config/thresholds.yaml
+  camera_profile_file: config/camera_profile.yaml
+  retry_policy_file: config/retry_policy.yaml
+runtime:
+  cycle_seconds: 10
+  structured_logging: true

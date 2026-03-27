@@ -1,0 +1,23 @@
+{
+  "chunk": "C01",
+  "status": "pass",
+  "checks": {
+    "adc": {
+      "status": "pass",
+      "metrics": {
+        "mean_v": 0.0,
+        "std_v": 0.003892,
+        "peak_to_peak_v": 0.011286,
+        "correlation": 0.9993394434989282
+      },
+      "checks": {
+        "std_ok": true,
+        "peak_to_peak_ok": true,
+        "polarity_ok": true,
+        "std_max_v": 0.01,
+        "peak_to_peak_max_v": 0.02,
+        "expect_correlation": "positive"
+      }
+    }
+  }
+}

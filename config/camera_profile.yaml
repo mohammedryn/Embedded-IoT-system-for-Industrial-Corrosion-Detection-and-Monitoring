@@ -1,0 +1,19 @@
+camera:
+  sensor: imx477
+  still_width: 1280
+  still_height: 720
+  roi:
+    x: 0.30
+    y: 0.20
+    w: 0.40
+    h: 0.60
+  exposure_mode: manual
+  exposure_time_us: 12000
+  analogue_gain: 1.5
+  awb_mode: off
+  color_gains:
+    red: 1.5
+    blue: 1.4
+  blur_threshold: 90.0
+  overexposed_pct_max: 4.0
+  underexposed_pct_max: 4.0

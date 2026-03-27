@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-03-27T19:01:34.191174+00:00",
+  "cycle_id": "t_under",
+  "image_id": "img-55fe92cbfce1",
+  "roi_info": {
+    "x": 0.3,
+    "y": 0.2,
+    "w": 0.4,
+    "h": 0.6
+  },
+  "rust_coverage_pct": 0.0,
+  "rust_coverage_band": "unknown",
+  "pitting_proxy_count": 0,
+  "pitting_severity_band": "unknown",
+  "surface_quality_class": "unknown",
+  "dominant_color_class": "unknown",
+  "morphology_class": "unknown",
+  "visual_severity_0_to_10": 0.0,
+  "confidence_0_to_1": 0.2,
+  "quality_flags": [
+    "blur_too_high",
+    "underexposed"
+  ],
+  "degraded_mode": false,
+  "fallback_reason": "quality_gate_failed",
+  "model_version": "vision-c04-v1",
+  "preprocessing_version": "pre-c04-v1",
+  "latency_ms": 28
+}

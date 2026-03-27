@@ -1,0 +1,17 @@
+rp_ohms:
+  excellent_min: 100000
+  very_good_min: 50000
+  good_min: 10000
+  fair_min: 5000
+  warning_min: 1000
+  severe_min: 500
+current_microamps:
+  negligible_max: 0.5
+  slow_max: 2.0
+  moderate_max: 10.0
+  fast_max: 50.0
+visual:
+  rust_coverage:
+    light_max_pct: 10
+    moderate_max_pct: 35
+    heavy_min_pct: 35

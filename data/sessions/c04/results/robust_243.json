@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-03-27T19:02:55.973931+00:00",
+  "cycle_id": "robust_243",
+  "image_id": "img-aa195ff3b462",
+  "roi_info": {
+    "x": 0.3,
+    "y": 0.2,
+    "w": 0.4,
+    "h": 0.6
+  },
+  "rust_coverage_pct": 74.3,
+  "rust_coverage_band": "heavy",
+  "pitting_proxy_count": 78,
+  "pitting_severity_band": "none",
+  "surface_quality_class": "slightly_rough",
+  "dominant_color_class": "mixed",
+  "morphology_class": "localized",
+  "visual_severity_0_to_10": 8.33,
+  "confidence_0_to_1": 0.98,
+  "quality_flags": [],
+  "degraded_mode": false,
+  "fallback_reason": "",
+  "model_version": "vision-c04-v1",
+  "preprocessing_version": "pre-c04-v1",
+  "latency_ms": 386
+}

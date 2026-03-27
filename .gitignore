@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Runtime data
+*.log
+data/logs/*.jsonl
+
+# OS/editor
+.DS_Store
+.vscode/

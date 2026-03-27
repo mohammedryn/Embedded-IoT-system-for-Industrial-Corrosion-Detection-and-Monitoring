@@ -1,0 +1,14 @@
+retry:
+  serial_connect:
+    max_attempts: 10
+    backoff_seconds: 1
+  camera_capture:
+    max_attempts: 3
+    backoff_seconds: 0.5
+  ai_call:
+    max_attempts: 3
+    timeout_seconds: 8
+    backoff_seconds: 1
+  publish:
+    max_attempts: 3
+    backoff_seconds: 1
