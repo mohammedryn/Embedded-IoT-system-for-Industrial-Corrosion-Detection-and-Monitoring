@@ -2,3 +2,4 @@ pyyaml
 python-json-logger
 pydantic
 Pillow
+google-generativeai
