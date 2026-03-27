@@ -1,0 +1,31 @@
+{
+  "chunk": "C06",
+  "timestamp": 1774649557.3794096,
+  "status": "pass",
+  "tests": {
+    "agreement_scenario": {
+      "pass": true,
+      "evidence": "stable fusion output with no conflict"
+    },
+    "conflict_scenario": {
+      "pass": true,
+      "evidence": "delta>3 detected and rationale populated"
+    },
+    "noise_robustness": {
+      "pass": true,
+      "evidence": "small perturbations do not create unstable jumps"
+    },
+    "ml_override_scenario": {
+      "pass": true,
+      "evidence": "implausible advisory overridden with explicit reason"
+    },
+    "ml_missing_fallback": {
+      "pass": true,
+      "evidence": "deterministic heuristic used when ML unavailable"
+    },
+    "degraded_stale_propagation": {
+      "pass": true,
+      "evidence": "upstream degraded/stale flags preserved in fused output"
+    }
+  }
+}

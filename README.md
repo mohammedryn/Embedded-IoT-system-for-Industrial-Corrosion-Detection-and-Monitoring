@@ -11,20 +11,24 @@ This repository follows chunk-wise execution from C00 onward.
 3. Run C01 tooling verification:
    - `make smoke-c01`
 
-## C04 and C05 Verification
+## C04, C05, and C06 Verification
 
 1. Run vision smoke checks:
    - `make smoke-c04`
 2. Run AI specialist smoke checks:
    - `make smoke-c05`
+3. Run fusion and RUL smoke checks:
+   - `make smoke-c06`
 
 Expected output lines:
 - `[PASS] C04 smoke checks passed`
 - `[PASS] C05 smoke checks passed`
+- `[PASS] C06 smoke checks passed`
 
 Artifacts:
 - `data/sessions/c04/c04-verification-summary.json`
 - `data/sessions/c05/c05-verification-summary.json`
+- `data/sessions/c06/c06-verification-summary.json`
 
 ## Top-Level Structure
 

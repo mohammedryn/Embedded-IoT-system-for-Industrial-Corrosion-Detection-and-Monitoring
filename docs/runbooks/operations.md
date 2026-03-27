@@ -33,6 +33,22 @@ Expected artifact:
 - `data/sessions/c05/c05-verification-summary.json`
 - Summary contains `"status": "pass"`
 
+## C06 Fusion and RUL Verification
+
+1. Activate environment:
+   - `source .venv/bin/activate`
+2. Run C06 verification:
+   - `make smoke-c06`
+3. Optional direct run:
+   - `python scripts/verify_c06.py`
+
+Expected terminal output:
+- `[PASS] C06 smoke checks passed`
+
+Expected artifact:
+- `data/sessions/c06/c06-verification-summary.json`
+- Summary contains `"status": "pass"`
+
 ## Shutdown
 
 1. Stop services gracefully.
