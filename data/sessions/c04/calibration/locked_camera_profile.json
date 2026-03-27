@@ -1,7 +1,7 @@
 {
-  "locked_at": "2026-03-27T19:01:34.095781+00:00",
-  "still_width": 1280,
-  "still_height": 720,
+  "locked_at": "2026-03-27T20:10:16.511281+00:00",
+  "still_width": 1920,
+  "still_height": 1080,
   "roi": {
     "x": 0.3,
     "y": 0.2,
@@ -11,5 +11,5 @@
   "exposure_mode": "manual",
   "exposure_time_us": 12000,
   "analogue_gain": 1.5,
-  "awb_mode": "False"
+  "awb_mode": "off"
 }

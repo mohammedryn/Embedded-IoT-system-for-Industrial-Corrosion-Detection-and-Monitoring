@@ -1,6 +1,6 @@
 {
   "chunk": "C04",
-  "timestamp": 1774638094.0922544,
+  "timestamp": 1774642216.508942,
   "tests": {
     "quality_blur_reject": {
       "pass": true,
@@ -14,9 +14,17 @@
       "pass": true,
       "evidence": "data/sessions/c04/results/t_clean_schema.json"
     },
+    "jpeg_capture_with_cycle_metadata": {
+      "pass": true,
+      "evidence": "data/sessions/c04/captures/t_clean_schema.jpg, data/sessions/c04/captures/t_clean_schema.meta.json"
+    },
     "degraded_mode_fallback": {
       "pass": true,
       "evidence": "data/sessions/c04/results/t_forced_fail.json"
+    },
+    "quality_retry_exhaustion_fallback": {
+      "pass": true,
+      "evidence": "data/sessions/c04/results/t_quality_fail.json"
     },
     "trend_sanity": {
       "pass": true,
@@ -26,14 +34,14 @@
     },
     "latency_median_target": {
       "pass": true,
-      "median_latency_ms": 243.5,
-      "target_ms": 8000,
+      "median_latency_ms": 232,
+      "target_ms": 10000,
       "evidence": "data/sessions/c04/results/*.json"
     },
     "accelerated_robustness_simulation": {
       "pass": true,
       "cycles": 300,
-      "elapsed_seconds": 94.78,
+      "elapsed_seconds": 68.79,
       "evidence": "data/sessions/c04/results/robust_*.json"
     }
   },

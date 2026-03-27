@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-27T19:02:54.268551+00:00",
+  "timestamp": "2026-03-27T20:11:15.594095+00:00",
   "cycle_id": "robust_fail_238",
-  "image_id": "img-545fb0fe7ba1",
+  "image_id": "img-0d331e71090a",
   "roi_info": {
     "x": 0.3,
     "y": 0.2,
@@ -17,12 +17,23 @@
   "morphology_class": "localized",
   "visual_severity_0_to_10": 8.33,
   "confidence_0_to_1": 0.98,
+  "key_findings": [
+    "rust_coverage=74.3% (heavy)",
+    "pitting_proxy_count=78 (none)",
+    "morphology=localized, dominant_color=mixed"
+  ],
+  "uncertainty_drivers": [
+    "low_pitting_signal",
+    "stale_fallback_used"
+  ],
   "quality_flags": [
-    "capture_failed"
+    "capture_failed",
+    "stale_result"
   ],
   "degraded_mode": true,
   "fallback_reason": "capture_failed_retries_exhausted",
+  "capture_metadata": {},
   "model_version": "vision-c04-v1",
   "preprocessing_version": "pre-c04-v1",
-  "latency_ms": 151
+  "latency_ms": 156
 }

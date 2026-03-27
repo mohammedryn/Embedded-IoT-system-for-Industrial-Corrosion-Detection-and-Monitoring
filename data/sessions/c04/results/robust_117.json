@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-27T19:02:17.004122+00:00",
+  "timestamp": "2026-03-27T20:10:48.406113+00:00",
   "cycle_id": "robust_117",
-  "image_id": "img-81976043a81c",
+  "image_id": "img-57d4590f270d",
   "roi_info": {
     "x": 0.3,
     "y": 0.2,
@@ -17,10 +17,40 @@
   "morphology_class": "localized",
   "visual_severity_0_to_10": 8.33,
   "confidence_0_to_1": 0.98,
+  "key_findings": [
+    "rust_coverage=74.3% (heavy)",
+    "pitting_proxy_count=78 (none)",
+    "morphology=localized, dominant_color=mixed"
+  ],
+  "uncertainty_drivers": [
+    "low_pitting_signal"
+  ],
   "quality_flags": [],
   "degraded_mode": false,
   "fallback_reason": "",
+  "capture_metadata": {
+    "timestamp": "2026-03-27T20:10:48.163186+00:00",
+    "cycle_id": "robust_117",
+    "frame_id": "frame-a1171bf57d43",
+    "image_path": "/home/m0mspagetthi/corrosion/data/sessions/c04/captures/robust_117.jpg",
+    "image_format": "jpeg",
+    "still_width": 1920,
+    "still_height": 1080,
+    "roi_id": "default_roi",
+    "roi": {
+      "x": 0.3,
+      "y": 0.2,
+      "w": 0.4,
+      "h": 0.6
+    },
+    "exposure_mode": "manual",
+    "exposure_time_us": 12000,
+    "analogue_gain": 1.5,
+    "awb_mode": "off",
+    "camera_binary": "mock-camera",
+    "source_image": "/home/m0mspagetthi/corrosion/data/sessions/c04/test_images/corroded_1.jpg"
+  },
   "model_version": "vision-c04-v1",
   "preprocessing_version": "pre-c04-v1",
-  "latency_ms": 365
+  "latency_ms": 244
 }

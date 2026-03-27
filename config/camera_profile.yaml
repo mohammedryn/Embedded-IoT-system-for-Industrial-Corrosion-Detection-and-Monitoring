@@ -1,7 +1,7 @@
 camera:
   sensor: imx477
-  still_width: 1280
-  still_height: 720
+  still_width: 1920
+  still_height: 1080
   roi:
     x: 0.30
     y: 0.20

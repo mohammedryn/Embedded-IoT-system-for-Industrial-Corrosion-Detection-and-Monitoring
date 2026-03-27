@@ -35,9 +35,12 @@ class VisionResult(BaseModel):
     morphology_class: str
     visual_severity_0_to_10: float
     confidence_0_to_1: float
+    key_findings: list[str]
+    uncertainty_drivers: list[str]
     quality_flags: list[str]
     degraded_mode: bool
     fallback_reason: str
+    capture_metadata: dict[str, Any] = Field(default_factory=dict)
     model_version: str
     preprocessing_version: str
 
@@ -91,6 +94,12 @@ class VisionPipeline:
         cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
         c = cfg["camera"]
         roi = c["roi"]
+        awb_raw = c.get("awb_mode", "off")
+        if isinstance(awb_raw, bool):
+            awb_mode = "auto" if awb_raw else "off"
+        else:
+            awb_mode = str(awb_raw)
+
         return CameraProfile(
             still_width=int(c["still_width"]),
             still_height=int(c["still_height"]),
@@ -101,7 +110,7 @@ class VisionPipeline:
             exposure_mode=str(c.get("exposure_mode", "manual")),
             exposure_time_us=int(c.get("exposure_time_us", 12000)),
             analogue_gain=float(c.get("analogue_gain", 1.5)),
-            awb_mode=str(c.get("awb_mode", "off")),
+            awb_mode=awb_mode,
             blur_threshold=float(c.get("blur_threshold", 90.0)),
             overexposed_pct_max=float(c.get("overexposed_pct_max", 4.0)),
             underexposed_pct_max=float(c.get("underexposed_pct_max", 4.0)),
@@ -136,15 +145,33 @@ class VisionPipeline:
         force_capture_failure: bool = False,
     ) -> dict[str, Any]:
         start = time.perf_counter()
-        quality_flags: list[str] = []
         fallback_reason = ""
-
         image_path: Path | None = None
+        analyzed: dict[str, Any] | None = None
+        last_quality_flags: list[str] = []
+
         for attempt in range(1, retries + 1):
             try:
                 if force_capture_failure:
                     raise RuntimeError("forced capture failure for test")
                 image_path = self.capture_image(cycle_id, capture_source_image)
+
+                analyzed = self.analyze_image(image_path, cycle_id)
+                qf = analyzed.get("quality_flags", [])
+                if qf:
+                    last_quality_flags = list(qf)
+                    self.logger.warning(
+                        "quality gate failed, retrying capture",
+                        extra={
+                            "event": "vision_quality_retry",
+                            "component": "vision",
+                            "attempt": attempt,
+                            "quality_flags": qf,
+                        },
+                    )
+                    time.sleep(0.05)
+                    continue
+
                 break
             except Exception as exc:  # pylint: disable=broad-except
                 self.logger.warning(
@@ -158,29 +185,25 @@ class VisionPipeline:
                 )
                 time.sleep(0.05)
 
-        degraded_mode = False
-        if image_path is None:
-            degraded_mode = True
+        if analyzed is None or image_path is None:
             fallback_reason = "capture_failed_retries_exhausted"
-            quality_flags.append("capture_failed")
-            if self.last_valid_result is not None:
-                result = dict(self.last_valid_result)
-                result["timestamp"] = _ts()
-                result["cycle_id"] = cycle_id
-                result["degraded_mode"] = True
-                result["fallback_reason"] = fallback_reason
-                result["quality_flags"] = sorted(set(result.get("quality_flags", []) + quality_flags))
-                result["latency_ms"] = int((time.perf_counter() - start) * 1000)
-                self._write_result(cycle_id, result)
-                return result
-            result = self._empty_result(cycle_id, quality_flags, degraded_mode, fallback_reason)
+            quality_flags = ["capture_failed"]
+            result = self._fallback_result(cycle_id, quality_flags, fallback_reason)
             result["latency_ms"] = int((time.perf_counter() - start) * 1000)
             self._write_result(cycle_id, result)
             return result
 
-        result = self.analyze_image(image_path, cycle_id)
-        result["degraded_mode"] = degraded_mode or result.get("degraded_mode", False)
-        result["fallback_reason"] = fallback_reason or result.get("fallback_reason", "")
+        if analyzed.get("quality_flags", []):
+            fallback_reason = "quality_gate_failed_retries_exhausted"
+            quality_flags = sorted(set(last_quality_flags or analyzed.get("quality_flags", [])))
+            result = self._fallback_result(cycle_id, quality_flags, fallback_reason)
+            result["latency_ms"] = int((time.perf_counter() - start) * 1000)
+            self._write_result(cycle_id, result)
+            return result
+
+        result = analyzed
+        result["degraded_mode"] = result.get("degraded_mode", False)
+        result["fallback_reason"] = result.get("fallback_reason", "")
         result["latency_ms"] = int((time.perf_counter() - start) * 1000)
 
         if not result["degraded_mode"]:
@@ -198,6 +221,12 @@ class VisionPipeline:
                 raise ValueError("mock camera requires capture_source_image")
             src = Path(capture_source_image)
             shutil.copy2(src, out)
+            self._write_capture_metadata(
+                cycle_id=cycle_id,
+                image_path=out,
+                camera_binary="mock-camera",
+                source_image=str(src),
+            )
             return out
 
         camera_bin = self._resolve_camera_binary()
@@ -218,6 +247,12 @@ class VisionPipeline:
             str(out),
         ]
         subprocess.run(cmd, check=True, capture_output=True, text=True)
+        self._write_capture_metadata(
+            cycle_id=cycle_id,
+            image_path=out,
+            camera_binary=camera_bin,
+            source_image=None,
+        )
         return out
 
     def _resolve_camera_binary(self) -> str:
@@ -232,6 +267,7 @@ class VisionPipeline:
         path = Path(image_path)
         img = Image.open(path).convert("RGB")
         roi = self._crop_roi(img)
+        capture_metadata = self._read_capture_metadata(cycle_id)
 
         quality_flags = self._quality_flags(roi)
         if quality_flags:
@@ -240,6 +276,7 @@ class VisionPipeline:
                 quality_flags=quality_flags,
                 degraded_mode=False,
                 fallback_reason="quality_gate_failed",
+                capture_metadata=capture_metadata,
             )
 
         rust_pct, rust_band = self._rust_coverage(roi)
@@ -250,6 +287,12 @@ class VisionPipeline:
 
         severity = min(10.0, max(0.0, (rust_pct / 10.0) * 0.65 + min(3.5, pitting_count / 60.0 * 3.5)))
         confidence = self._confidence(roi, quality_flags, rust_pct, pitting_count)
+        key_findings = [
+            f"rust_coverage={round(rust_pct, 2)}% ({rust_band})",
+            f"pitting_proxy_count={int(pitting_count)} ({pitting_band})",
+            f"morphology={morphology}, dominant_color={dominant_color}",
+        ]
+        uncertainty_drivers = self._uncertainty_drivers(confidence, quality_flags, rust_pct, pitting_count)
 
         payload = VisionResult(
             timestamp=_ts(),
@@ -270,9 +313,12 @@ class VisionPipeline:
             morphology_class=morphology,
             visual_severity_0_to_10=round(severity, 2),
             confidence_0_to_1=round(confidence, 3),
+            key_findings=key_findings,
+            uncertainty_drivers=uncertainty_drivers,
             quality_flags=quality_flags,
             degraded_mode=False,
             fallback_reason="",
+            capture_metadata=capture_metadata,
             model_version=self.model_version,
             preprocessing_version=self.preprocessing_version,
         ).model_dump()
@@ -303,7 +349,7 @@ class VisionPipeline:
         x1 = max(x0 + 1, min(x1, w))
         y1 = max(y0 + 1, min(y1, h))
         roi = img.crop((x0, y0, x1, y1))
-        # Keep CPU bounded on Pi 3 B+ with ROI resize.
+        # Keep compute bounded while preserving deterministic cycle timing.
         return roi.resize((640, 640))
 
     def _quality_flags(self, roi: Image.Image) -> list[str]:
@@ -433,12 +479,98 @@ class VisionPipeline:
         signal = min(1.0, (rust_pct / 45.0) + min(0.5, pitting_count / 4000.0))
         return max(0.45, min(0.98, 0.55 + 0.25 * mid + 0.2 * signal))
 
+    def _uncertainty_drivers(
+        self,
+        confidence: float,
+        quality_flags: list[str],
+        rust_pct: float,
+        pitting_count: int,
+    ) -> list[str]:
+        drivers: list[str] = []
+        if quality_flags:
+            drivers.append("quality_flags_present")
+        if confidence < 0.65:
+            drivers.append("low_model_confidence")
+        if rust_pct < 3.0:
+            drivers.append("low_rust_signal")
+        if pitting_count < 200:
+            drivers.append("low_pitting_signal")
+        if not drivers:
+            drivers.append("none")
+        return drivers
+
+    def _capture_metadata_path(self, cycle_id: str) -> Path:
+        return self.captures_dir / f"{cycle_id}.meta.json"
+
+    def _write_capture_metadata(
+        self,
+        cycle_id: str,
+        image_path: Path,
+        camera_binary: str,
+        source_image: str | None,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "timestamp": _ts(),
+            "cycle_id": cycle_id,
+            "frame_id": f"frame-{uuid.uuid4().hex[:12]}",
+            "image_path": str(image_path),
+            "image_format": "jpeg",
+            "still_width": self.profile.still_width,
+            "still_height": self.profile.still_height,
+            "roi_id": "default_roi",
+            "roi": {
+                "x": self.profile.roi_x,
+                "y": self.profile.roi_y,
+                "w": self.profile.roi_w,
+                "h": self.profile.roi_h,
+            },
+            "exposure_mode": self.profile.exposure_mode,
+            "exposure_time_us": self.profile.exposure_time_us,
+            "analogue_gain": self.profile.analogue_gain,
+            "awb_mode": self.profile.awb_mode,
+            "camera_binary": camera_binary,
+        }
+        if source_image:
+            payload["source_image"] = source_image
+        self._capture_metadata_path(cycle_id).write_text(
+            json.dumps(payload, indent=2),
+            encoding="utf-8",
+        )
+
+    def _read_capture_metadata(self, cycle_id: str) -> dict[str, Any]:
+        p = self._capture_metadata_path(cycle_id)
+        if not p.exists():
+            return {}
+        return json.loads(p.read_text(encoding="utf-8"))
+
+    def _fallback_result(self, cycle_id: str, quality_flags: list[str], fallback_reason: str) -> dict[str, Any]:
+        if self.last_valid_result is not None:
+            result = dict(self.last_valid_result)
+            result["timestamp"] = _ts()
+            result["cycle_id"] = cycle_id
+            result["degraded_mode"] = True
+            result["fallback_reason"] = fallback_reason
+            merged_flags = sorted(set(result.get("quality_flags", []) + quality_flags + ["stale_result"]))
+            result["quality_flags"] = merged_flags
+            result["uncertainty_drivers"] = sorted(set(result.get("uncertainty_drivers", []) + ["stale_fallback_used"]))
+            result["capture_metadata"] = self._read_capture_metadata(cycle_id)
+            return result
+
+        return self._empty_result(
+            cycle_id=cycle_id,
+            quality_flags=quality_flags,
+            degraded_mode=True,
+            fallback_reason=fallback_reason,
+            capture_metadata=self._read_capture_metadata(cycle_id),
+        )
+
     def _empty_result(
         self,
         cycle_id: str,
         quality_flags: list[str],
         degraded_mode: bool,
         fallback_reason: str,
+        capture_metadata: dict[str, Any],
     ) -> dict[str, Any]:
         payload = VisionResult(
             timestamp=_ts(),
@@ -459,9 +591,12 @@ class VisionPipeline:
             morphology_class="unknown",
             visual_severity_0_to_10=0.0,
             confidence_0_to_1=0.2,
+            key_findings=["no_valid_visual_signal"],
+            uncertainty_drivers=["degraded_mode", fallback_reason] if fallback_reason else ["degraded_mode"],
             quality_flags=quality_flags,
             degraded_mode=degraded_mode,
             fallback_reason=fallback_reason,
+            capture_metadata=capture_metadata,
             model_version=self.model_version,
             preprocessing_version=self.preprocessing_version,
         ).model_dump()

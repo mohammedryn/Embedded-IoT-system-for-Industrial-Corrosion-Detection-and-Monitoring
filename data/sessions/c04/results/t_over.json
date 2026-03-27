@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-27T19:01:34.162114+00:00",
+  "timestamp": "2026-03-27T20:10:16.968637+00:00",
   "cycle_id": "t_over",
-  "image_id": "img-43f2d336a53a",
+  "image_id": "img-7e5a8df0a1eb",
   "roi_info": {
     "x": 0.3,
     "y": 0.2,
@@ -17,13 +17,42 @@
   "morphology_class": "unknown",
   "visual_severity_0_to_10": 0.0,
   "confidence_0_to_1": 0.2,
+  "key_findings": [
+    "no_valid_visual_signal"
+  ],
+  "uncertainty_drivers": [
+    "degraded_mode",
+    "quality_gate_failed_retries_exhausted"
+  ],
   "quality_flags": [
     "blur_too_high",
     "overexposed"
   ],
-  "degraded_mode": false,
-  "fallback_reason": "quality_gate_failed",
+  "degraded_mode": true,
+  "fallback_reason": "quality_gate_failed_retries_exhausted",
+  "capture_metadata": {
+    "timestamp": "2026-03-27T20:10:16.895527+00:00",
+    "cycle_id": "t_over",
+    "frame_id": "frame-830ce392e6d9",
+    "image_path": "/home/m0mspagetthi/corrosion/data/sessions/c04/captures/t_over.jpg",
+    "image_format": "jpeg",
+    "still_width": 1920,
+    "still_height": 1080,
+    "roi_id": "default_roi",
+    "roi": {
+      "x": 0.3,
+      "y": 0.2,
+      "w": 0.4,
+      "h": 0.6
+    },
+    "exposure_mode": "manual",
+    "exposure_time_us": 12000,
+    "analogue_gain": 1.5,
+    "awb_mode": "off",
+    "camera_binary": "mock-camera",
+    "source_image": "/home/m0mspagetthi/corrosion/data/sessions/c04/test_images/overexposed.jpg"
+  },
   "model_version": "vision-c04-v1",
   "preprocessing_version": "pre-c04-v1",
-  "latency_ms": 26
+  "latency_ms": 219
 }

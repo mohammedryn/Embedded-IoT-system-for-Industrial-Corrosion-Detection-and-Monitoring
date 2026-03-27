@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-27T19:02:07.253497+00:00",
+  "timestamp": "2026-03-27T20:10:40.942140+00:00",
   "cycle_id": "robust_86",
-  "image_id": "img-3f07b88cbd74",
+  "image_id": "img-b6ca8700cdd5",
   "roi_info": {
     "x": 0.3,
     "y": 0.2,
@@ -17,10 +17,41 @@
   "morphology_class": "none",
   "visual_severity_0_to_10": 0.0,
   "confidence_0_to_1": 0.8,
+  "key_findings": [
+    "rust_coverage=0.0% (none)",
+    "pitting_proxy_count=0 (none)",
+    "morphology=none, dominant_color=gray_silver"
+  ],
+  "uncertainty_drivers": [
+    "low_rust_signal",
+    "low_pitting_signal"
+  ],
   "quality_flags": [],
   "degraded_mode": false,
   "fallback_reason": "",
+  "capture_metadata": {
+    "timestamp": "2026-03-27T20:10:40.713762+00:00",
+    "cycle_id": "robust_86",
+    "frame_id": "frame-312ecaa7a72e",
+    "image_path": "/home/m0mspagetthi/corrosion/data/sessions/c04/captures/robust_86.jpg",
+    "image_format": "jpeg",
+    "still_width": 1920,
+    "still_height": 1080,
+    "roi_id": "default_roi",
+    "roi": {
+      "x": 0.3,
+      "y": 0.2,
+      "w": 0.4,
+      "h": 0.6
+    },
+    "exposure_mode": "manual",
+    "exposure_time_us": 12000,
+    "analogue_gain": 1.5,
+    "awb_mode": "off",
+    "camera_binary": "mock-camera",
+    "source_image": "/home/m0mspagetthi/corrosion/data/sessions/c04/test_images/clean_1.jpg"
+  },
   "model_version": "vision-c04-v1",
   "preprocessing_version": "pre-c04-v1",
-  "latency_ms": 287
+  "latency_ms": 229
 }

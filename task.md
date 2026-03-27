@@ -8,11 +8,11 @@ meta:
   version: 1.0
   date: 2026-03-27
   hardware_target:
-    - Raspberry Pi 3 B+
+    - Raspberry Pi 5 (8GB)
     - Pi HQ Camera
     - Teensy 4.1
     - MCP4725 + ADS1115 + potentiostat board
-  os_target: Raspberry Pi OS
+  os_target: Ubuntu 24.04 LTS (64-bit)
   project_mode: Demo-first, reliability-focused
   definition_of_done:
     - Full 30-minute demo runs without unrecovered failure
@@ -27,7 +27,7 @@ execution_rules:
 
 quality_bars:
   reliability: "No unrecovered crash in 60-minute burn-in"
-  latency: "End-to-end assessment under 15s in demo mode"
+  latency: "End-to-end assessment under 10s nominal, under 15s worst-case in degraded demo mode"
   traceability: "Every decision links to logs and versioned configs"
   explainability: "Severity and confidence include human-readable drivers"
 
@@ -44,7 +44,7 @@ chunks:
       - Enable structured logging format from day one.
     prompts:
       - "Create a production-grade repository skeleton for a Raspberry Pi corrosion monitoring system with firmware, edge, vision, and fusion modules. Include config, scripts, docs, and tests folders."
-      - "Generate a dependency lock strategy for Raspberry Pi OS with minimal footprint and reproducible installs."
+      - "Generate a dependency lock strategy for Ubuntu 24.04 on Raspberry Pi 5 with minimal footprint and reproducible installs."
       - "Draft an operations runbook template covering startup, health checks, failure recovery, and shutdown."
     outcomes_to_test:
       - "Repo has deterministic setup with one command bootstrap."
@@ -79,15 +79,15 @@ chunks:
     dos:
       - Build cycle loop: generate perturbation, sample ADC, detect peaks, compute current and Rp.
       - Implement status band mapping from Rp thresholds.
-      - Add CRC or checksum to serial frames.
+      - Implement master-aligned text frame protocol: Rp:<value>, Status:<band>, separator line.
       - Add watchdog and fault codes.
       - Include timestamp/cycle index in each frame.
     prompts:
       - "Write firmware architecture for a 10s corrosion measurement cycle with peak extraction and Rp computation."
-      - "Propose a robust serial frame schema with checksum and recovery from malformed frames."
+      - "Propose a robust serial frame schema compatible with Rp:value and Status:value text lines, plus recovery from malformed frames."
       - "Create unit-like validation strategy for firmware math and threshold classification."
     outcomes_to_test:
-      - "Each cycle emits one valid frame with checksum pass."
+      - "Each cycle emits one valid frame with parsable Rp and Status fields."
       - "Injected malformed frame is detected and ignored without crash."
       - "Status transitions follow threshold table with synthetic test vectors."
     exit_gate:
@@ -114,8 +114,8 @@ chunks:
       - "30-minute continuous ingest run with complete, gap-labeled timeline."
 
   - id: C04
-    name: Vision Pipeline v1 (Pi 3 B+ + HQ Camera)
-    objective: Achieve stable image capture, quality gating, and corrosion feature extraction within Pi 3 B+ constraints.
+    name: Vision Pipeline v1 (Pi 5 + HQ Camera)
+    objective: Achieve stable image capture, quality gating, and corrosion feature extraction aligned to master Pi 5 constraints.
     dos:
       - Calibrate and lock exposure/white-balance after setup.
       - Implement ROI-first processing and blur/exposure quality gates.
@@ -123,12 +123,13 @@ chunks:
       - Emit vision JSON with severity and confidence.
       - Add degraded mode: fallback to last valid frame/result.
     prompts:
-      - "Build a lightweight corrosion vision pipeline for Pi 3 B+ using still images, ROI processing, and quality gates."
+      - "Build a lightweight corrosion vision pipeline for Pi 5 using still images, ROI processing, and quality gates, aligned to 10-second cycle cadence."
       - "Define a confidence model for visual severity under variable lighting and blur conditions."
       - "Generate a vision output JSON schema compatible with fusion input contracts."
     outcomes_to_test:
       - "Capture-to-result median latency stays inside vision budget."
       - "Quality gate rejects blurred/overexposed frames correctly."
+      - "Each accepted cycle stores image artifacts in JPEG format with cycle metadata."
       - "Severity trend increases during induced corrosion and drops on fresh sample swap."
     exit_gate:
       - "1-hour run with no camera-service crash and consistent frame quality metrics."
@@ -138,6 +139,7 @@ chunks:
     objective: Standardize specialist outputs and confidence behavior under normal and degraded inputs.
     dos:
       - Define strict JSON schemas and validation for both specialists.
+      - Align cloud specialist model baseline to Gemini 3 Flash for sensor, vision, and fusion orchestration.
       - Build prompt templates with deterministic structure.
       - Add retries, timeout policy, and stale-result fallback.
       - Record reasoning snippets and confidence drivers.
@@ -157,8 +159,8 @@ chunks:
     name: Fusion and RUL Integration
     objective: Produce a single trustworthy assessment from sensor, vision, and model signals.
     dos:
-      - Implement conflict detection using severity delta threshold.
-      - Define stage-aware weighting policy (early vs advanced corrosion).
+      - Implement conflict detection using master threshold (severity delta > 3 points).
+      - Define stage-aware weighting policy with default 60% electrochemical and 40% visual weighting.
       - Integrate XGBoost baseline predictor as advisory input.
       - Output unified severity, RUL, confidence interval, and rationale.
       - Log override reasons when model is overruled.
@@ -235,7 +237,7 @@ chunks:
 
 acceptance_matrix:
   - metric: End-to-end latency
-    target: "< 15s demo mode"
+    target: "8-10s typical, < 15s worst-case demo mode"
     test_method: "Timestamp diff from sensor frame arrival to final fused output"
   - metric: Vision stability
     target: "No unrecovered crash in 60 minutes"
@@ -251,8 +253,8 @@ acceptance_matrix:
     test_method: "Output contract audit"
 
 operating_prompts_pack:
-  architecture_prompt: "Act as principal systems architect. Produce a minimal-risk design for a Pi 3 B+ corrosion monitoring stack with strict resource budgeting, fault tolerance, and explainability. Return modules, contracts, and run-order."
-  coding_prompt: "Act as senior embedded+edge engineer. Implement the requested module with deterministic behavior, structured logs, retries, and test hooks. Keep Pi 3 B+ constraints explicit."
+  architecture_prompt: "Act as principal systems architect. Produce a minimal-risk design for a Raspberry Pi 5 corrosion monitoring stack with strict resource budgeting, fault tolerance, and explainability. Return modules, contracts, and run-order."
+  coding_prompt: "Act as senior embedded+edge engineer. Implement the requested module with deterministic behavior, structured logs, retries, and test hooks. Keep Raspberry Pi 5 and Ubuntu 24.04 constraints explicit."
   testing_prompt: "Act as reliability lead. Generate edge-case tests, failure injections, pass/fail criteria, and expected logs for this module."
   review_prompt: "Act as a critical reviewer. Find correctness gaps, race conditions, hidden assumptions, and demo-breaking risks. Return prioritized fixes."
 

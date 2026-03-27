@@ -1,12 +1,12 @@
-# PRD: Vision Subsystem for AI-Based Corrosion Monitoring (Pi 3 B+ Edition)
+# PRD: Vision Subsystem for AI-Based Corrosion Monitoring (Master-Aligned Edition)
 
 ## 1. Product Overview
 
 The Vision Subsystem captures and analyzes steel-surface images to quantify corrosion state and provide structured visual outputs for system fusion and remaining useful life (RUL) prediction. This subsystem is explicitly constrained to run on:
 
-- Raspberry Pi 3 Model B+
+- Raspberry Pi 5 (8 GB recommended)
 - Pi HQ Camera (Sony IMX477)
-- Raspberry Pi OS
+- Ubuntu 24.04 LTS (64-bit)
 
 The subsystem is designed for laboratory demonstrations and educational/research use, with a primary focus on robust, explainable corrosion visual assessment under limited edge compute resources.
 
@@ -26,7 +26,7 @@ The subsystem is designed for laboratory demonstrations and educational/research
 1. Capture stable, analyzable images of the steel working electrode throughout corrosion progression.
 2. Quantify corrosion appearance using metrics such as rust coverage, pitting proxies, color shift, and surface quality.
 3. Produce standardized vision severity (0-10) and confidence (0-1) for each analysis cycle.
-4. Operate reliably for at least 1 hour continuously on Pi 3 B+ in demo mode.
+4. Operate reliably for at least 1 hour continuously on Raspberry Pi 5 in demo mode.
 5. Deliver outputs that are directly consumable by sensor-fusion and RUL pipelines.
 
 ### 2.2 Non-Goals
@@ -59,22 +59,23 @@ The subsystem is designed for laboratory demonstrations and educational/research
 
 ### 4.1 Hardware Constraints
 
-- Compute: Raspberry Pi 3 B+ (limited CPU and RAM compared to Pi 4/5).
+- Compute: Raspberry Pi 5 (ARM Cortex-A76, 8 GB RAM target profile).
 - Camera: Pi HQ Camera with C/CS lens and fixed mount.
 - Lighting: External controlled light source is mandatory for repeatability.
 
 ### 4.2 OS and Runtime Constraints
 
-- Operating System: Raspberry Pi OS.
-- Camera stack: libcamera-based capture tools/libraries.
-- Runtime target: Python-based orchestration with lightweight image processing.
+- Operating System: Ubuntu 24.04 LTS (64-bit).
+- Camera stack: libcamera/picamera2 (with command-line fallback support for rpicam-still and libcamera-still).
+- Runtime target: Python-based orchestration with asynchronous specialist execution and structured JSON outputs.
 
-### 4.3 Pi 3 B+ Feasibility Constraints
+### 4.3 Raspberry Pi 5 Deployment Constraints
 
 1. Inference must be still-image based, not real-time video inference.
-2. Default analysis must use controlled resolution (ROI-first strategy) to stay within CPU limits.
+2. Default analysis must use ROI-first processing to preserve deterministic latency across long runs.
 3. Capture cadence must be matched to sensor cycles, not maximum camera throughput.
 4. Thermal and memory headroom must be preserved to avoid throttling and instability.
+5. Default capture schedule shall remain aligned to the 10-second electrochemical cycle.
 
 ---
 
@@ -114,6 +115,16 @@ The subsystem is designed for laboratory demonstrations and educational/research
 7. Confidence score (0-1).
 8. Quality flags and degraded-mode indicators.
 
+### 5.5 Specialist and Fusion Interface Alignment
+
+1. Vision outputs shall be compatible with the Vision Specialist -> Fusion Agent contract in the master architecture.
+2. Fusion-side policy assumptions that vision must support:
+   - Default modality weighting: 60 percent electrochemical, 40 percent visual.
+   - Conflict trigger threshold: absolute severity delta greater than 3.0.
+   - Early-stage mismatch handling may temporarily shift weighting toward electrochemical evidence.
+3. Vision payloads shall always include sufficient evidence fields for conflict rationale generation.
+4. Cloud specialist orchestration targets Gemini 3 Flash profiles for latency and cost balance.
+
 ---
 
 ## 6. Functional Requirements
@@ -121,11 +132,13 @@ The subsystem is designed for laboratory demonstrations and educational/research
 ### 6.1 Camera and Capture Requirements
 
 - FR-VIS-CAM-1: The subsystem shall initialize Pi HQ Camera and report ready state within 10 seconds of service start.
-- FR-VIS-CAM-2: The subsystem shall capture still images on configured schedule aligned to measurement cycle (default: every 10 seconds or every N cycles).
+- FR-VIS-CAM-2: The subsystem shall capture still images on configured schedule aligned to the measurement cycle (default: every 10 seconds, optional every N cycles).
 - FR-VIS-CAM-3: The subsystem shall support ROI-centered capture/processing focused on the steel working electrode.
 - FR-VIS-CAM-4: The subsystem shall support calibration-time exposure lock and white-balance lock to minimize drift.
 - FR-VIS-CAM-5: The subsystem shall attach metadata (timestamp, exposure, gain, white-balance mode, ROI ID, frame ID) to each capture.
 - FR-VIS-CAM-6: The subsystem shall support a short burst mode (for example 3 frames) and select best frame using image quality score when enabled.
+- FR-VIS-CAM-7: The subsystem shall support 1920x1080 still capture as the default master-aligned operating mode.
+- FR-VIS-CAM-8: The subsystem shall persist captured frames in JPEG format for traceability and replay.
 
 ### 6.2 Image Quality Gate Requirements
 
@@ -166,6 +179,7 @@ The subsystem is designed for laboratory demonstrations and educational/research
 - FR-VIS-INT-3: The payload shall include quality_flags and degraded_mode indicators.
 - FR-VIS-INT-4: Publish failure shall trigger retry and queue/backoff policy.
 - FR-VIS-INT-5: On repeated publish failure, subsystem shall store local outputs for eventual sync.
+- FR-VIS-INT-6: The payload shall include specialist-ready fields required by fusion for cross-modal agreement and override rationale.
 
 ---
 
@@ -203,14 +217,15 @@ Optional extension fields:
 
 ---
 
-## 8. Performance and Non-Functional Requirements (Pi 3 B+)
+## 8. Performance and Non-Functional Requirements (Raspberry Pi 5)
 
 ### 8.1 Performance
 
-- NFR-VIS-PERF-1: Capture-to-result latency target shall be 3 to 8 seconds typical and 12 seconds max in demo mode.
+- NFR-VIS-PERF-1: Capture-to-result latency target shall be under 10 seconds nominal, with 15 seconds hard ceiling in degraded/network-affected conditions.
 - NFR-VIS-PERF-2: Vision cycle shall complete within the global system cycle budget without blocking serial ingestion.
-- NFR-VIS-PERF-3: Average sustained CPU utilization for vision process shall remain below 80 percent over 30-minute demo.
+- NFR-VIS-PERF-3: Average sustained CPU utilization for vision process shall remain below 75 percent over a 30-minute demo.
 - NFR-VIS-PERF-4: Memory usage shall avoid swap thrashing during continuous operation.
+- NFR-VIS-PERF-5: End-to-end multimodal assessment should stay near the master-observed 8 to 10 second envelope under nominal network conditions.
 
 ### 8.2 Reliability and Robustness
 
@@ -249,6 +264,7 @@ Optional extension fields:
 3. Lock exposure and white balance under demo lighting.
 4. Record calibration profile ID and store with session metadata.
 5. Validate image quality gate with at least 3 consecutive acceptable frames.
+6. Verify 1920x1080 still capture and metadata logging before runtime start.
 
 ### 9.3 Runtime Operation
 
@@ -336,6 +352,11 @@ The subsystem shall support explanatory correlation against Rp bands:
 
 If strong mismatch occurs, subsystem shall raise correlation_warning flag for fusion logic.
 
+Fusion compatibility note:
+1. Conflict severity delta threshold defaults to >3.0.
+2. Default fusion weighting is 60 percent electrochemical and 40 percent visual.
+3. Vision outputs must include key findings and uncertainty drivers to support conflict resolution narrative.
+
 ---
 
 ## 12. Error Handling and Degraded Modes
@@ -378,8 +399,8 @@ If strong mismatch occurs, subsystem shall raise correlation_warning flag for fu
 2. Reflection/glare from solution surface causes false detections.
    - Mitigation: adjust camera angle, polarizing filter if needed, matte backdrop.
 
-3. Pi 3 B+ thermal throttling degrades latency.
-   - Mitigation: ROI processing, reduced cadence, passive/active cooling.
+3. Raspberry Pi 5 thermal throttling degrades latency during long runs.
+   - Mitigation: ROI processing, reduced cadence fallback, passive/active cooling, and pre-demo thermal soak checks.
 
 4. Cloud/API latency spikes.
    - Mitigation: timeout controls, retry, stale fallback mode.
@@ -438,7 +459,7 @@ If strong mismatch occurs, subsystem shall raise correlation_warning flag for fu
 ### M4: Demo Hardening
 
 - Phase-by-phase rehearsal.
-- Performance tuning for Pi 3 B+.
+- Performance tuning for Raspberry Pi 5.
 - Acceptance checklist sign-off.
 
 ---
@@ -449,7 +470,8 @@ If strong mismatch occurs, subsystem shall raise correlation_warning flag for fu
 2. Keep model/lightweight pipeline modular so cloud and local paths can be swapped.
 3. Version both model and preprocessing pipeline from day one.
 4. Retain representative frames for each severity band for future retraining.
-5. Prioritize deterministic calibration over aggressive algorithm complexity on Pi 3 B+.
+5. Prioritize deterministic calibration over aggressive algorithm complexity during live demo operation.
+6. Keep command-level camera fallback behavior explicit for libcamera and rpicam tool variants.
 
 ---
 
@@ -457,7 +479,7 @@ If strong mismatch occurs, subsystem shall raise correlation_warning flag for fu
 
 The vision subsystem is successful if:
 
-1. It runs stably on Pi 3 B+ with Pi HQ Camera for full demo duration.
+1. It runs stably on Raspberry Pi 5 with Pi HQ Camera for full demo duration.
 2. Visual metrics track expected corrosion evolution trends.
 3. Outputs are interpretable, confidence-aware, and fusion-ready.
 4. Fresh-vs-corroded comparison clearly demonstrates meaningful visual contrast.

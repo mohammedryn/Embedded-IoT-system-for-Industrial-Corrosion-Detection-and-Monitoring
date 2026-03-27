@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-03-27T20:11:24.589428+00:00",
+  "cycle_id": "robust_277",
+  "frame_id": "frame-fcb0b5971ed8",
+  "image_path": "/home/m0mspagetthi/corrosion/data/sessions/c04/captures/robust_277.jpg",
+  "image_format": "jpeg",
+  "still_width": 1920,
+  "still_height": 1080,
+  "roi_id": "default_roi",
+  "roi": {
+    "x": 0.3,
+    "y": 0.2,
+    "w": 0.4,
+    "h": 0.6
+  },
+  "exposure_mode": "manual",
+  "exposure_time_us": 12000,
+  "analogue_gain": 1.5,
+  "awb_mode": "off",
+  "camera_binary": "mock-camera",
+  "source_image": "/home/m0mspagetthi/corrosion/data/sessions/c04/test_images/clean_1.jpg"
+}
