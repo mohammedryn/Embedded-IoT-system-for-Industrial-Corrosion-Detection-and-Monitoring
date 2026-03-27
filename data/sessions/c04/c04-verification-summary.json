@@ -1,6 +1,6 @@
 {
   "chunk": "C04",
-  "timestamp": 1774642216.508942,
+  "timestamp": 1774644607.6408837,
   "tests": {
     "quality_blur_reject": {
       "pass": true,
@@ -34,14 +34,14 @@
     },
     "latency_median_target": {
       "pass": true,
-      "median_latency_ms": 232,
+      "median_latency_ms": 224,
       "target_ms": 10000,
       "evidence": "data/sessions/c04/results/*.json"
     },
     "accelerated_robustness_simulation": {
       "pass": true,
       "cycles": 300,
-      "elapsed_seconds": 68.79,
+      "elapsed_seconds": 74.08,
       "evidence": "data/sessions/c04/results/robust_*.json"
     }
   },

@@ -57,8 +57,22 @@
 ## Known Limitations
 
 1. Physical 1-hour Pi HQ camera endurance run on Raspberry Pi hardware was not executed in CI; replaced with accelerated robustness simulation.
-2. Real camera mode requires running VisionPipeline with use_mock_camera=False on Raspberry Pi OS with libcamera available.
+2. Real camera mode requires running VisionPipeline with use_mock_camera=False on Ubuntu 24.04 with libcamera/rpicam available.
+
+## Waiver Record (Provisional Sign-Off)
+
+1. Waiver ID: C04-WAIVER-001
+2. Decision: Approved provisional progression to next chunk
+3. Waived criterion: 1-hour physical camera endurance run (C04 hardware-only check)
+4. Reason: Camera is operational and software verification is complete; immediate bench time not available
+5. Scope impact: C04 is complete for development progression, but not fully closed for final hardware reliability sign-off
+6. Mandatory follow-up before final demo:
+	- One 20-30 minute real-camera rehearsal on target hardware
+	- One full 1-hour real-camera endurance run with logs attached
+7. Risk note: Potential long-run camera reliability/thermal issues remain until follow-up tests are completed
 
 ## Final Statement
 
-C04 complete for implementation and verification in CI-safe mode, with one explicit pending hardware-only validation item: 1-hour physical camera endurance run.
+C04 complete for implementation and verification in CI-safe mode, with provisional sign-off granted under waiver C04-WAIVER-001.
+
+Full hardware reliability closeout remains pending until the required real-camera endurance follow-up is executed and documented.

@@ -10,3 +10,8 @@ paths:
 runtime:
   cycle_seconds: 10
   structured_logging: true
+ai:
+  provider: gemini
+  primary_model_id: gemini-3-flash-preview
+  fallback_model_id: gemini-3.1-pro-preview
+  response_mode: json

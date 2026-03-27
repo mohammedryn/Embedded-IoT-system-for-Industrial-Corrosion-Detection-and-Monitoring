@@ -17,6 +17,22 @@
 - Retry policy reference: `config/retry_policy.yaml`.
 - Degraded mode behavior: retain last known valid state and flag outputs.
 
+## C05 Specialist Verification
+
+1. Activate environment:
+   - `source .venv/bin/activate`
+2. Run C05 verification:
+   - `make smoke-c05`
+3. Optional direct run:
+   - `python scripts/verify_c05.py`
+
+Expected terminal output:
+- `[PASS] C05 smoke checks passed`
+
+Expected artifact:
+- `data/sessions/c05/c05-verification-summary.json`
+- Summary contains `"status": "pass"`
+
 ## Shutdown
 
 1. Stop services gracefully.

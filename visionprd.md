@@ -123,7 +123,7 @@ The subsystem is designed for laboratory demonstrations and educational/research
    - Conflict trigger threshold: absolute severity delta greater than 3.0.
    - Early-stage mismatch handling may temporarily shift weighting toward electrochemical evidence.
 3. Vision payloads shall always include sufficient evidence fields for conflict rationale generation.
-4. Cloud specialist orchestration targets Gemini 3 Flash profiles for latency and cost balance.
+4. Cloud specialist orchestration targets Gemini 3 Flash Preview (`gemini-3-flash-preview`) as the primary model for latency and cost balance.
 
 ---
 

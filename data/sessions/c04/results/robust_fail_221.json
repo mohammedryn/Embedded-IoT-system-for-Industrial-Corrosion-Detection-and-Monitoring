@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-03-27T20:11:11.499229+00:00",
+  "timestamp": "2026-03-27T20:51:06.622711+00:00",
   "cycle_id": "robust_fail_221",
-  "image_id": "img-27e7217db186",
+  "image_id": "img-2baa67866994",
   "roi_info": {
     "x": 0.3,
     "y": 0.2,
@@ -36,5 +36,5 @@
   "capture_metadata": {},
   "model_version": "vision-c04-v1",
   "preprocessing_version": "pre-c04-v1",
-  "latency_ms": 152
+  "latency_ms": 151
 }

@@ -139,7 +139,7 @@ chunks:
     objective: Standardize specialist outputs and confidence behavior under normal and degraded inputs.
     dos:
       - Define strict JSON schemas and validation for both specialists.
-      - Align cloud specialist model baseline to Gemini 3 Flash for sensor, vision, and fusion orchestration.
+      - Align cloud specialist model baseline to Gemini 3 Flash Preview (`gemini-3-flash-preview`) for sensor, vision, and fusion orchestration.
       - Build prompt templates with deterministic structure.
       - Add retries, timeout policy, and stale-result fallback.
       - Record reasoning snippets and confidence drivers.

@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: bootstrap smoke-c00 smoke-c01 smoke-c04
+.PHONY: bootstrap smoke-c00 smoke-c01 smoke-c04 smoke-c05
 
 bootstrap:
 	bash scripts/bootstrap.sh
@@ -13,3 +13,6 @@ smoke-c01:
 
 smoke-c04:
 	bash scripts/verify_c04.sh
+
+smoke-c05:
+	bash scripts/verify_c05.sh

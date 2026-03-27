@@ -1,0 +1,30 @@
+{
+  "chunk": "C05",
+  "timestamp": 1774644606.6570022,
+  "status": "pass",
+  "tests": {
+    "valid_schema_output": {
+      "pass": true,
+      "evidence": "strict JSON accepted and schema-validated before fusion"
+    },
+    "malformed_output_recovery": {
+      "pass": true,
+      "attempts": 2,
+      "evidence": "bad JSON recovered by retry"
+    },
+    "timeout_retry_behavior": {
+      "pass": true,
+      "attempts": 3,
+      "models": [
+        "gemini-3-flash-preview",
+        "gemini-3-flash-preview",
+        "gemini-3.1-pro-preview"
+      ],
+      "evidence": "timeouts retried and recovered on fallback model"
+    },
+    "stale_fallback_behavior": {
+      "pass": true,
+      "evidence": "last-known-valid response reused with stale flags"
+    }
+  }
+}
