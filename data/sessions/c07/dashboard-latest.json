@@ -33,4 +33,5 @@
     "quality_label": "FRESH",
     "quality_color": "ok"
   }
-}
+}echo "export GOOGLE_API_KEY='AIzaSyCiRYD-s-_9d45GjTDEzzkZ347Dx9vnBdA'" >> ~/.bashrc
+source ~/.bashrc

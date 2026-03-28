@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -22,11 +23,15 @@ class GeminiAnalysis(BaseModel):
 
 
 class GeminiVisionClient:
-    """Client for Gemini 2.0 Flash vision analysis."""
+    """Client for Gemini vision analysis."""
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model_id: str | None = None,
+        fallback_model_id: str | None = None,
+    ):
         """Initialize with optional API key. Falls back to GOOGLE_API_KEY env var."""
-        import os
         import google.generativeai as genai
 
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
@@ -36,8 +41,29 @@ class GeminiVisionClient:
                 "  export GOOGLE_API_KEY='your-key-here'\n"
                 "or pass api_key parameter"
             )
+
+        self.model_id = model_id or os.getenv("GEMINI_MODEL_ID") or "gemini-3-flash-preview"
+        self.fallback_model_id = fallback_model_id or os.getenv("GEMINI_FALLBACK_MODEL_ID") or "gemini-3.1-pro-preview"
         
         genai.configure(api_key=self.api_key)
+
+    @staticmethod
+    def _strip_json_fence(response_text: str) -> str:
+        txt = response_text.strip()
+        if txt.startswith("```"):
+            parts = txt.split("```")
+            if len(parts) >= 2:
+                txt = parts[1]
+            if txt.startswith("json"):
+                txt = txt[4:]
+            txt = txt.strip()
+        return txt
+
+    def _models_to_try(self) -> list[str]:
+        models: list[str] = [self.model_id]
+        if self.fallback_model_id and self.fallback_model_id not in models:
+            models.append(self.fallback_model_id)
+        return models
 
     def analyze_image_file(self, image_path: str | Path) -> dict[str, Any]:
         """Analyze a single image file and return structured analysis."""
@@ -73,37 +99,36 @@ class GeminiVisionClient:
   "confidence_0_to_1": 0.85,
   "key_findings": ["finding1", "finding2"],
   "recommendations": ["recommendation1", "recommendation2"],
-  "model_id": "gemini-2.0-flash"
+  "model_id": "the model id that produced this answer"
 }
 
 Be specific and quantifiable."""
 
-        # Call Gemini API
+        # Call Gemini API with primary model and fallback model.
+        response_text = ""
+        last_error = ""
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash")
-            
-            # Send image with prompt
-            image_part = {
-                "mime_type": mime_type,
-                "data": image_data
+            for model_id in self._models_to_try():
+                try:
+                    model = genai.GenerativeModel(model_id)
+
+                    image_part = {"mime_type": mime_type, "data": image_data}
+                    response = model.generate_content([prompt, image_part])
+                    response_text = self._strip_json_fence(response.text)
+                    analysis_dict = json.loads(response_text)
+
+                    # Ensure output model_id reflects the actual model used.
+                    analysis_dict["model_id"] = model_id
+                    validated = GeminiAnalysis.model_validate(analysis_dict)
+                    return validated.model_dump()
+                except Exception as e:
+                    last_error = f"{model_id}: {e}"
+                    continue
+
+            return {
+                "error": "Gemini API call failed for all configured models",
+                "details": last_error or "No model attempts were made",
             }
-            
-            response = model.generate_content([prompt, image_part])
-            response_text = response.text.strip()
-            
-            # Extract JSON from response
-            if response_text.startswith("```"):
-                # Remove markdown code blocks if present
-                response_text = response_text.split("```")[1]
-                if response_text.startswith("json"):
-                    response_text = response_text[4:]
-                response_text = response_text.strip()
-            
-            analysis_dict = json.loads(response_text)
-            
-            # Validate with Pydantic
-            validated = GeminiAnalysis.model_validate(analysis_dict)
-            return validated.model_dump()
             
         except json.JSONDecodeError as e:
             return {
@@ -133,29 +158,31 @@ Be specific and quantifiable."""
   "confidence_0_to_1": 0.85,
   "key_findings": ["finding1"],
   "recommendations": ["rec1"],
-  "model_id": "gemini-2.0-flash"
+  "model_id": "the model id that produced this answer"
 }"""
 
+        response_text = ""
+        last_error = ""
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash")
-            
-            image_part = {
-                "mime_type": mime_type,
-                "data": image_data
+            for model_id in self._models_to_try():
+                try:
+                    model = genai.GenerativeModel(model_id)
+                    image_part = {"mime_type": mime_type, "data": image_data}
+
+                    response = model.generate_content([prompt, image_part])
+                    response_text = self._strip_json_fence(response.text)
+                    analysis_dict = json.loads(response_text)
+                    analysis_dict["model_id"] = model_id
+                    validated = GeminiAnalysis.model_validate(analysis_dict)
+                    return validated.model_dump()
+                except Exception as e:
+                    last_error = f"{model_id}: {e}"
+                    continue
+
+            return {
+                "error": "Gemini API call failed for all configured models",
+                "details": last_error or "No model attempts were made",
             }
-            
-            response = model.generate_content([prompt, image_part])
-            response_text = response.text.strip()
-            
-            if response_text.startswith("```"):
-                response_text = response_text.split("```")[1]
-                if response_text.startswith("json"):
-                    response_text = response_text[4:]
-                response_text = response_text.strip()
-            
-            analysis_dict = json.loads(response_text)
-            validated = GeminiAnalysis.model_validate(analysis_dict)
-            return validated.model_dump()
             
         except json.JSONDecodeError as e:
             return {

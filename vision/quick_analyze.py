@@ -126,6 +126,11 @@ Examples:
         help="Gemini API key (or set GOOGLE_API_KEY env var)"
     )
     parser.add_argument(
+        "--model",
+        type=str,
+        help="Gemini model ID (e.g., gemini-3-flash-preview)"
+    )
+    parser.add_argument(
         "--output",
         type=str,
         help="Save JSON results to file"
@@ -174,7 +179,7 @@ Examples:
 
     # Initialize Gemini client
     try:
-        client = GeminiVisionClient(api_key=args.api_key)
+        client = GeminiVisionClient(api_key=args.api_key, model_id=args.model)
     except ValueError as e:
         print(f"❌ {e}")
         sys.exit(1)
