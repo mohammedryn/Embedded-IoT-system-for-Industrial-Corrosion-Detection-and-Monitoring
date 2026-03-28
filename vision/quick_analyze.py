@@ -17,9 +17,31 @@ except ModuleNotFoundError:
     from gemini_client import GeminiVisionClient
 
 
-def capture_image_rpicam(output_path: Path) -> bool:
+def _find_recent_image(capture_dir: Path, start_time: float) -> Path | None:
+    """Find the newest non-empty image created after start_time."""
+    candidates: list[Path] = []
+    for p in capture_dir.iterdir():
+        if not p.is_file():
+            continue
+        if p.suffix.lower() not in {".jpg", ".jpeg", ".png", ".bmp", ".webp"}:
+            continue
+        try:
+            if p.stat().st_size <= 0:
+                continue
+            if p.stat().st_mtime >= (start_time - 0.2):
+                candidates.append(p)
+        except OSError:
+            continue
+
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+def capture_image_rpicam(output_path: Path) -> Path | None:
     """Capture image using rpicam-still (Raspberry Pi Bookworm+)."""
     try:
+        start_time = time.time()
         attempts = [
             ["rpicam-still", "-o", str(output_path), "-t", "1000", "--nopreview", "--camera", "0"],
             ["rpicam-still", "-o", str(output_path), "-t", "2000", "--camera", "0"],
@@ -37,8 +59,13 @@ def capture_image_rpicam(output_path: Path) -> bool:
             # Some camera stacks return before filesystem buffers are visible.
             for _ in range(20):
                 if output_path.exists() and output_path.stat().st_size > 0:
-                    return True
+                    return output_path
                 time.sleep(0.1)
+
+            alt = _find_recent_image(output_path.parent, start_time)
+            if alt is not None:
+                print(f"✓ Captured image detected at alternate path: {alt}")
+                return alt
 
             out = (result.stdout or "").strip()
             err = (result.stderr or "").strip()
@@ -48,30 +75,33 @@ def capture_image_rpicam(output_path: Path) -> bool:
             elif out:
                 print(out)
 
-        return False
+        return None
     except FileNotFoundError:
         print("❌ rpicam-still not found. Install with: sudo apt install -y rpicam-apps")
-        return False
+        return None
     except Exception as e:
         print(f"❌ Capture failed: {e}")
-        return False
+        return None
 
 
-def capture_image_raspistill(output_path: Path) -> bool:
+def capture_image_raspistill(output_path: Path) -> Path | None:
     """Fallback: Capture using raspistill (older Pi OS)."""
     try:
+        start_time = time.time()
         result = subprocess.run(["raspistill", "-o", str(output_path)], capture_output=True, text=True, timeout=15)
         if result.returncode != 0:
             err = (result.stderr or result.stdout or "").strip()
             if err:
                 print(err)
-            return False
-        return output_path.exists() and output_path.stat().st_size > 0
+            return None
+        if output_path.exists() and output_path.stat().st_size > 0:
+            return output_path
+        return _find_recent_image(output_path.parent, start_time)
     except FileNotFoundError:
-        return False
+        return None
     except Exception as e:
         print(f"❌ Capture failed: {e}")
-        return False
+        return None
 
 
 def main() -> None:
@@ -126,7 +156,8 @@ Examples:
         
         print(f"📷 Capturing image to {image_path}...")
         
-        if not (capture_image_rpicam(image_path) or capture_image_raspistill(image_path)):
+        captured_path = capture_image_rpicam(image_path) or capture_image_raspistill(image_path)
+        if captured_path is None:
             print("\n⚠️  Could not capture image. \n")
             print("If you're NOT on a Raspberry Pi:")
             print("  Use: python vision/quick_analyze.py --file sample.jpg\n")
@@ -137,9 +168,7 @@ Examples:
             print("    rpicam-hello -t 0  # Preview/test camera\n")
             sys.exit(1)
 
-        if not image_path.exists():
-            print(f"❌ Capture failed - file not created at {image_path}")
-            sys.exit(1)
+        image_path = captured_path
         
         print(f"✓ Image captured: {image_path}")
 
