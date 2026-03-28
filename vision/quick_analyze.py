@@ -6,6 +6,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,12 +20,23 @@ except ModuleNotFoundError:
 def capture_image_rpicam(output_path: Path) -> bool:
     """Capture image using rpicam-still (Raspberry Pi Bookworm+)."""
     try:
-        result = subprocess.run(
-            ["rpicam-still", "-o", str(output_path), "-t", "1", "--immediate"],
-            capture_output=True,
-            timeout=10
-        )
-        return result.returncode == 0
+        cmd = ["rpicam-still", "-o", str(output_path), "-t", "300", "--immediate", "--nopreview"]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout or "").strip()
+            print("❌ rpicam-still failed")
+            if err:
+                print(err)
+            return False
+
+        # Some camera stacks return before filesystem buffers are visible.
+        for _ in range(10):
+            if output_path.exists() and output_path.stat().st_size > 0:
+                return True
+            time.sleep(0.1)
+
+        print("❌ rpicam-still returned success but no image file was produced")
+        return False
     except FileNotFoundError:
         print("❌ rpicam-still not found. Install with: sudo apt install -y rpicam-apps")
         return False
@@ -36,12 +48,13 @@ def capture_image_rpicam(output_path: Path) -> bool:
 def capture_image_raspistill(output_path: Path) -> bool:
     """Fallback: Capture using raspistill (older Pi OS)."""
     try:
-        result = subprocess.run(
-            ["raspistill", "-o", str(output_path)],
-            capture_output=True,
-            timeout=10
-        )
-        return result.returncode == 0
+        result = subprocess.run(["raspistill", "-o", str(output_path)], capture_output=True, text=True, timeout=15)
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout or "").strip()
+            if err:
+                print(err)
+            return False
+        return output_path.exists() and output_path.stat().st_size > 0
     except FileNotFoundError:
         return False
     except Exception as e:
