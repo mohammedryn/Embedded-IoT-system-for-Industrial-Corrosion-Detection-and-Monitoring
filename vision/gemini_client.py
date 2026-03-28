@@ -38,7 +38,6 @@ class GeminiVisionClient:
             )
         
         genai.configure(api_key=self.api_key)
-        self.client = genai.GenerativeAI()
 
     def analyze_image_file(self, image_path: str | Path) -> dict[str, Any]:
         """Analyze a single image file and return structured analysis."""
