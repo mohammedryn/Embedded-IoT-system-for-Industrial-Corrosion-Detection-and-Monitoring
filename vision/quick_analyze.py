@@ -18,13 +18,13 @@ except ModuleNotFoundError:
 
 
 def _find_recent_image(capture_dir: Path, start_time: float) -> Path | None:
-    """Find the newest non-empty image created after start_time."""
+    """Find the newest non-empty capture candidate created after start_time."""
     candidates: list[Path] = []
     for p in capture_dir.iterdir():
         if not p.is_file():
             continue
-        if p.suffix.lower() not in {".jpg", ".jpeg", ".png", ".bmp", ".webp"}:
-            continue
+        # Some rpicam builds may emit files with odd names (e.g., trailing dot).
+        # Accept any non-empty file and let normalization handle final extension.
         try:
             if p.stat().st_size <= 0:
                 continue
@@ -36,6 +36,22 @@ def _find_recent_image(capture_dir: Path, start_time: float) -> Path | None:
     if not candidates:
         return None
     return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
+def _normalize_capture_path(found_path: Path, desired_path: Path) -> Path:
+    """Ensure captured image ends up at the desired .jpg path."""
+    if found_path == desired_path:
+        return found_path
+
+    # If an odd filename was produced, move it to the expected target name.
+    try:
+        if desired_path.exists() and desired_path != found_path:
+            desired_path.unlink()
+        found_path.rename(desired_path)
+        return desired_path
+    except OSError:
+        # If rename fails (cross-device / permission), keep original path.
+        return found_path
 
 
 def capture_image_rpicam(output_path: Path) -> Path | None:
@@ -64,8 +80,12 @@ def capture_image_rpicam(output_path: Path) -> Path | None:
 
             alt = _find_recent_image(output_path.parent, start_time)
             if alt is not None:
-                print(f"✓ Captured image detected at alternate path: {alt}")
-                return alt
+                normalized = _normalize_capture_path(alt, output_path)
+                if normalized != alt:
+                    print(f"✓ Captured image normalized to: {normalized}")
+                else:
+                    print(f"✓ Captured image detected at alternate path: {alt}")
+                return normalized
 
             out = (result.stdout or "").strip()
             err = (result.stderr or "").strip()
@@ -96,7 +116,10 @@ def capture_image_raspistill(output_path: Path) -> Path | None:
             return None
         if output_path.exists() and output_path.stat().st_size > 0:
             return output_path
-        return _find_recent_image(output_path.parent, start_time)
+        alt = _find_recent_image(output_path.parent, start_time)
+        if alt is None:
+            return None
+        return _normalize_capture_path(alt, output_path)
     except FileNotFoundError:
         return None
     except Exception as e:
