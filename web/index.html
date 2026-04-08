@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI System Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="background-globes">
+        <div class="globe globe-1"></div>
+        <div class="globe globe-2"></div>
+        <div class="globe globe-3"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <div class="header-left">
+                <div class="logo">
+                    <span class="logo-icon">ai</span>
+                    <h1>Corrosion<strong>Intelligence</strong></h1>
+                </div>
+                <p class="subtitle">Multi-Sensor Remaining Life Prediction System</p>
+            </div>
+            <div class="header-right">
+                <div class="info-badge">
+                    <span class="label">Cycle ID</span>
+                    <span class="value" id="cycle_id">--</span>
+                </div>
+                <div class="info-badge">
+                    <span class="label">Timestamp</span>
+                    <span class="value" id="timestamp">--</span>
+                </div>
+            </div>
+        </header>
+
+        <section class="phases-timeline" id="phases_container">
+            <!-- Populated via JS -->
+        </section>
+
+        <div class="dashboard-grid">
+            <!-- Electrochemical Card -->
+            <div class="card stat-card" id="card_sensor">
+                <div class="card-header">
+                    <h3>Electrochemical Sensor</h3>
+                    <div class="badge" id="sensor_status">HEALTHY</div>
+                </div>
+                <div class="stat-value">
+                    <h2 class="animate-value" id="rp_ohm">0</h2>
+                    <span class="unit">Ω Rp</span>
+                </div>
+                <div class="stat-sub">
+                    <span><strong id="current_ma">0</strong> mA Current</span>
+                </div>
+            </div>
+
+            <!-- Vision Engine Card -->
+            <div class="card stat-card" id="card_vision">
+                <div class="card-header">
+                    <h3>Vision AI Engine</h3>
+                    <div class="badge" id="vision_quality">FRESH</div>
+                </div>
+                <div class="stat-value">
+                    <h2 class="animate-value" id="vision_severity">0.0</h2>
+                    <span class="unit">/ 10 Sev</span>
+                </div>
+                <div class="stat-sub" id="vision_flags_container">
+                    <span class="text-truncate">Quality: <strong id="vision_flags">None</strong></span>
+                </div>
+            </div>
+
+            <!-- Fused Confidence Card -->
+            <div class="card stat-card glow-card" id="card_confidence">
+                <div class="card-header">
+                    <h3>Fused AI Confidence</h3>
+                    <div class="pulse-indicator" id="confidence_pulse"></div>
+                </div>
+                <div class="stat-value">
+                    <h2 class="animate-value" id="confidence_percent">0</h2>
+                    <span class="unit">%</span>
+                </div>
+                <div class="stat-sub">
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="confidence_bar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Remaining Useful Life Card -->
+            <div class="card stat-card highlight" id="card_rul">
+                <div class="card-header">
+                    <h3>RUL Prediction</h3>
+                </div>
+                <div class="stat-value">
+                    <h2 class="animate-value emphasis" id="rul_days">0.0</h2>
+                    <span class="unit">Days</span>
+                </div>
+                <div class="stat-sub">
+                    <span>Severity: <strong id="fused_severity">0.0</strong> / 10</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls-panel card">
+            <button class="btn btn-outlined" id="btn_pause">Pause Demo</button>
+            <button class="btn btn-outlined" id="btn_resume">Resume</button>
+            <button class="btn btn-primary" id="btn_recapture">Recapture Image</button>
+            <button class="btn btn-primary" id="btn_recompute">Force Recompute</button>
+        </div>
+
+        <footer class="disclaimer">
+            * Educational / Laboratory Prototype. Not for industrial safety-critical use.
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
