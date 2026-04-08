@@ -6,6 +6,13 @@ __pycache__/
 # Runtime data
 *.log
 data/logs/*.jsonl
+data/sessions/c04/calibration/
+data/sessions/c04/captures/
+data/sessions/c04/results/
+data/sessions/c04/c04-verification-summary.json
+data/sessions/c07/dashboard-latest.json
+data/sessions/c07/dashboard-latest.html
+data/sessions/c07/c07-verification-summary.json
 
 # OS/editor
 .DS_Store
