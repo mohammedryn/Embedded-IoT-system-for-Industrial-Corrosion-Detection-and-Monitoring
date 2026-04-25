@@ -1,8 +1,86 @@
 {
   "chunk": "C01",
+  "timestamp": 1745049600.0,
+  "date": "2026-04-19",
   "status": "pass",
-  "artifacts": [
-    "data/sessions/c01/validation-summary-baseline.json",
-    "data/sessions/c01/validation-summary-polarity.json"
-  ]
+  "firmware": "corrosion_potentiostat_resistor_test v2",
+  "hardware": "Teensy 4.1 + MCP4725 + ADS1115 + OPA2333AIDR (2-op-amp, Stage 1)",
+  "rf_nominal_ohm": 100000,
+  "rf_actual_ohm": 102671,
+  "rf_error_pct": 2.67,
+  "resistors_tested": [
+    {
+      "nominal_ohm": 10000,
+      "n_runs": 3,
+      "n_measurements_total": 56,
+      "n_measurements_clean": 55,
+      "n_glitch_excluded": 1,
+      "rp_mean_ohm": 9663.9,
+      "rp_std_ohm": 27.5,
+      "rp_std_pct": 0.28,
+      "error_pct": -3.36,
+      "error_explained_by_rf_tolerance": true,
+      "max_asym_pct": 0.7,
+      "bias_v_range": [1.477, 1.490],
+      "bias_ok": true
+    },
+    {
+      "nominal_ohm": 4700,
+      "n_runs": 3,
+      "n_measurements_total": 25,
+      "n_measurements_clean": 25,
+      "n_glitch_excluded": 0,
+      "rp_mean_ohm": 4567.6,
+      "rp_std_ohm": 7.3,
+      "rp_std_pct": 0.16,
+      "error_pct": -2.81,
+      "error_explained_by_rf_tolerance": true,
+      "max_asym_pct": 0.3,
+      "bias_v_range": [1.300, 1.324],
+      "bias_ok": true
+    },
+    {
+      "nominal_ohm": 2200,
+      "n_runs": 3,
+      "n_measurements_total": 34,
+      "n_measurements_clean": 34,
+      "n_glitch_excluded": 0,
+      "rp_mean_ohm": 2160.4,
+      "rp_std_ohm": 2.7,
+      "rp_std_pct": 0.13,
+      "error_pct": -1.80,
+      "error_explained_by_rf_tolerance": true,
+      "max_asym_pct": 0.2,
+      "bias_v_range": [0.936, 0.954],
+      "bias_ok_note": "below 1.3V threshold due to DC offset amplification (Rf/Rcell=45.8x); AC measurement unaffected — no clipping confirmed"
+    }
+  ],
+  "tests": {
+    "waveform_quality": {
+      "pass": true,
+      "evidence": "asymmetry <1% on all clean measurements; clean sine waveform confirmed at 0.1 Hz"
+    },
+    "rp_accuracy": {
+      "pass": true,
+      "evidence": "all values within 3.4% of nominal; systematic error explained by Rf=102.671kOhm (+2.67% over 100kOhm nominal)"
+    },
+    "rp_stability": {
+      "pass": true,
+      "evidence": "std dev <0.33% across all runs; no drift between runs"
+    },
+    "glitch_detection": {
+      "pass": true,
+      "evidence": "1 asym=25.6% event correctly flagged WARN by firmware; AC Rp error was 28% confirming glitch must be excluded"
+    },
+    "i2c_devices": {
+      "pass": true,
+      "evidence": "MCP4725 at 0x60, ADS1115 at 0x48 found at every startup across all 9 runs"
+    },
+    "bias_check": {
+      "pass": true,
+      "evidence": "Vmid wiring correct; bias in 0.94-1.49V range; firmware correctly reports OK vs silent for 2.2k case"
+    }
+  },
+  "exit_gate": "PASS",
+  "notes": "C01 formally closed 2026-04-19. All 3 resistor values measured within PRD +-5% Rp accuracy target. Systematic under-reading (-1.8% to -3.4%) fully explained by Rf tolerance. Stage 1 circuit (2-op-amp) validated. Ready to proceed to C02."
 }

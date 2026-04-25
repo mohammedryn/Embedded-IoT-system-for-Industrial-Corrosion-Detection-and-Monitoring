@@ -19,3 +19,24 @@ data/sessions/c07/c07-verification-summary.json
 # OS/editor
 .DS_Store
 .vscode/
+
+#external
+.codex
+
+PRD1.md
+
+Visionprd.md
+
+Visionprd2.md
+
+PRD2.md
+
+README-ROADMAP.md
+
+Task.md
+
+Resistor_tests
+data/sessions/c01/2p2kohm_bench_runs.txt
+data/sessions/c01/4p7kohm_bench_runs.txt
+data/sessions/c01/10kohm_bench_runs.txt
+data/sessions/c01/rp_measurements_real.csv

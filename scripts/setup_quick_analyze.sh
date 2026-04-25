@@ -19,15 +19,15 @@ if [ -z "$GEMINI_KEY" ]; then
 fi
 
 # Check if in corrosion directory
-if [ ! -f "requirements.in" ]; then
+if [ ! -f "requirements.lock" ]; then
     echo "❌ Not in corrosion directory. Run from: ~/corrosion"
     exit 1
 fi
 
 # Update and install
 echo "📦 Installing Python packages..."
-pip install --upgrade pip > /dev/null 2>&1
-pip install -r requirements.in > /dev/null 2>&1
+pip install --upgrade pip==25.0.1 > /dev/null 2>&1
+pip install --require-hashes -r requirements.lock > /dev/null 2>&1
 
 # Add to bashrc
 echo ""

@@ -3,3 +3,4 @@ python-json-logger
 pydantic
 Pillow
 google-generativeai
+pyserial

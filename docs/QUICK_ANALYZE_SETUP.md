@@ -11,10 +11,10 @@
 
 ```bash
 # Update pip
-pip install --upgrade pip
+pip install --upgrade pip==25.0.1
 
-# Install requirements
-pip install -r requirements.in
+# Install hash-locked requirements
+pip install --require-hashes -r requirements.lock
 ```
 
 ## Step 3: Set Up API Key for Your Session
