@@ -388,3 +388,528 @@ h1 strong {
     .controls-panel { flex-wrap: wrap; }
     .btn { flex: 1 1 45%; }
 }
+
+/* ═══════════════════════════════════════
+   TAB NAVIGATION
+═══════════════════════════════════════ */
+.tab-nav {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0;
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-bottom: -1px;
+    padding: 0.6rem 1.25rem;
+    text-transform: uppercase;
+    transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.tab-btn:hover {
+    color: var(--text-main);
+}
+
+.tab-btn.active {
+    border-bottom-color: var(--brand-blue);
+    color: var(--text-main);
+}
+
+.tab-panel {
+    animation: fadeIn 0.2s ease;
+}
+
+.tab-panel.hidden {
+    display: none;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════
+   STEPPER
+═══════════════════════════════════════ */
+.stepper {
+    display: flex;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.stepper-step {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-shrink: 0;
+}
+
+.step-circle {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    color: var(--text-muted);
+    font-weight: 700;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.step-label {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: color 0.3s ease;
+}
+
+.stepper-step.active .step-circle {
+    background: var(--brand-blue);
+    border-color: var(--brand-blue);
+    color: white;
+    box-shadow: 0 0 16px var(--brand-glow);
+}
+
+.stepper-step.active .step-label {
+    color: var(--text-main);
+}
+
+.stepper-step.done .step-circle {
+    background: var(--ok-text);
+    border-color: var(--ok-text);
+    color: white;
+}
+
+.stepper-step.done .step-circle::before {
+    content: "✓";
+    font-size: 1rem;
+}
+
+.stepper-step.done .step-circle span { display: none; }
+
+.step-connector {
+    flex: 1;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 0 0.75rem;
+    border-radius: 99px;
+    transition: background 0.4s ease;
+}
+
+.step-connector.done {
+    background: var(--ok-text);
+}
+
+/* ═══════════════════════════════════════
+   STEP PANELS
+═══════════════════════════════════════ */
+.step-panel {
+    animation: fadeIn 0.2s ease;
+}
+
+.step-panel.hidden {
+    display: none;
+}
+
+.step-card {
+    padding: 2rem;
+}
+
+.step-card-header {
+    margin-bottom: 1.75rem;
+}
+
+.step-card-header h3 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 0.35rem;
+}
+
+.step-hint {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.step-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-top: 1.75rem;
+    flex-wrap: wrap;
+}
+
+.step-spacer {
+    flex: 1;
+}
+
+.step-error {
+    color: var(--crit-text);
+    font-size: 0.85rem;
+    margin-top: 0.75rem;
+}
+
+/* ═══════════════════════════════════════
+   STEP 1 — CAPTURE
+═══════════════════════════════════════ */
+.capture-layout {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.capture-preview-wrap {
+    flex: 0 0 auto;
+}
+
+.capture-preview {
+    width: 320px;
+    height: 180px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.capture-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.capture-placeholder {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.photo-strip-wrap {
+    flex: 1;
+    min-width: 0;
+}
+
+.photo-strip {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    min-height: 80px;
+}
+
+.photo-thumb {
+    position: relative;
+    width: 100px;
+    height: 64px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.photo-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.photo-thumb-delete {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    width: 20px;
+    height: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    border: none;
+    border-radius: 50%;
+    color: white;
+    font-size: 0.7rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.photo-thumb:hover .photo-thumb-delete {
+    opacity: 1;
+}
+
+.photo-count-label {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-top: 0.6rem;
+}
+
+/* ═══════════════════════════════════════
+   STEP 2 — MEASURE
+═══════════════════════════════════════ */
+.connection-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    margin-bottom: 1.25rem;
+}
+
+.conn-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.conn-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.conn-dot.connected {
+    background: var(--ok-text);
+    box-shadow: 0 0 8px var(--ok-glow);
+    animation: pulse 2s infinite;
+}
+
+.btn-sm {
+    padding: 0.45rem 0.9rem;
+    font-size: 0.85rem;
+}
+
+.live-reading-card {
+    background: rgba(59, 130, 246, 0.05);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.live-reading-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.live-reading-row:last-child {
+    margin-bottom: 0;
+}
+
+.live-label {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    min-width: 2rem;
+}
+
+.live-value {
+    font-size: 2.2rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-main);
+    line-height: 1;
+}
+
+.live-value-sm {
+    font-size: 1.4rem;
+}
+
+.live-unit {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.live-badge {
+    margin-left: auto;
+}
+
+.readings-progress {
+    margin-bottom: 1rem;
+}
+
+.readings-target-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.6rem;
+}
+
+.readings-label {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.readings-select {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-main);
+    font-family: inherit;
+    font-size: 0.9rem;
+    padding: 0.25rem 0.5rem;
+}
+
+.readings-count {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-left: auto;
+}
+
+/* ═══════════════════════════════════════
+   STEP 3 — ANALYZE
+═══════════════════════════════════════ */
+.analyze-launch {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.btn-lg {
+    padding: 1rem 2rem;
+    font-size: 1.05rem;
+}
+
+.analyze-summary {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.analyze-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+}
+
+.progress-step {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.progress-step.done {
+    color: var(--ok-text);
+}
+
+.prog-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-top-color: var(--brand-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+.progress-step.done .prog-spinner {
+    border: none;
+    animation: none;
+}
+
+.progress-step.done .prog-spinner::before {
+    content: "✓";
+    color: var(--ok-text);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.result-card {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    border-radius: 14px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.result-row {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.result-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.result-label {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.result-big {
+    font-size: 2.8rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.result-unit {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.result-badges {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.result-findings {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin-bottom: 0.75rem;
+}
+
+.result-rationale {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    font-style: italic;
+    line-height: 1.6;
+    border-top: 1px solid var(--border-color);
+    padding-top: 0.75rem;
+}

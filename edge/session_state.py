@@ -25,12 +25,14 @@ class SessionPhoto:
     id: str
     path: str
     captured_at: float
+    dimensions: tuple[int, int] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "path": self.path,
             "captured_at": self.captured_at,
+            "dimensions": list(self.dimensions) if self.dimensions else None,
         }
 
 
@@ -66,11 +68,12 @@ class SessionStateManager:
             self._readings = deque(maxlen=self._max_readings)
             return self._session_id
 
-    def add_photo(self, path: str) -> dict[str, Any]:
+    def add_photo(self, path: str, dimensions: tuple[int, int] | None = None) -> dict[str, Any]:
         photo = SessionPhoto(
             id=uuid.uuid4().hex,
             path=path,
             captured_at=time.time(),
+            dimensions=dimensions,
         )
         with self._lock:
             self._photos.append(photo)

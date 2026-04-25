@@ -154,6 +154,420 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn_resume').onclick = () => sendControl('resume');
     document.getElementById('btn_recapture').onclick = () => sendControl('recapture');
     document.getElementById('btn_recompute').onclick = () => sendControl('recompute');
-    
+
     pollState();
+    initTabs();
+    LabSession.init();
 });
+
+// ═══════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════
+function initTabs() {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const target = btn.dataset.tab;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+            btn.classList.add('active');
+            document.getElementById('tab-' + target).classList.remove('hidden');
+        });
+    });
+}
+
+// ═══════════════════════════════════════
+// LAB SESSION CONTROLLER
+// ═══════════════════════════════════════
+const LabSession = (() => {
+    let currentStep = 1;
+    let photos = [];        // [{id, path, captured_at, thumbnail_b64}]
+    let readings = [];      // raw frames from SSE
+    let sseSource = null;
+    let collecting = false;
+    let serialConnected = false;
+    let analyzeRunning = false;
+
+    function init() {
+        // Step navigation
+        document.getElementById('btn-step1-next').addEventListener('click', () => goToStep(2));
+        document.getElementById('btn-step2-back').addEventListener('click', () => goToStep(1));
+        document.getElementById('btn-step2-next').addEventListener('click', () => goToStep(3));
+        document.getElementById('btn-step3-back').addEventListener('click', () => goToStep(2));
+
+        // Step 1
+        document.getElementById('btn-capture').addEventListener('click', capturePhoto);
+        document.getElementById('btn-clear-photos').addEventListener('click', clearPhotos);
+
+        // Step 2
+        document.getElementById('btn-serial-connect').addEventListener('click', connectSerial);
+        document.getElementById('btn-serial-disconnect').addEventListener('click', disconnectSerial);
+        document.getElementById('btn-start-collecting').addEventListener('click', startCollecting);
+        document.getElementById('btn-stop-collecting').addEventListener('click', stopCollecting);
+
+        // Step 3
+        document.getElementById('btn-analyze').addEventListener('click', runAnalysis);
+        document.getElementById('btn-new-session').addEventListener('click', newSession);
+
+        // Initialize new server-side session
+        fetch('/api/session/new', { method: 'POST' }).catch(() => {});
+    }
+
+    // ─── STEP NAVIGATION ────────────────────────────────────────────
+    function goToStep(n) {
+        document.getElementById('step-panel-' + currentStep).classList.add('hidden');
+        document.getElementById('step-panel-' + n).classList.remove('hidden');
+
+        // Update stepper indicators
+        for (let i = 1; i <= 3; i++) {
+            const circle = document.getElementById('stepper-' + i);
+            circle.classList.remove('active', 'done');
+            if (i < n) circle.classList.add('done');
+            else if (i === n) circle.classList.add('active');
+        }
+        // Update connectors
+        document.getElementById('connector-1-2').classList.toggle('done', n > 1);
+        document.getElementById('connector-2-3').classList.toggle('done', n > 2);
+
+        currentStep = n;
+
+        if (n === 2) refreshStep2();
+        if (n === 3) refreshStep3Summary();
+    }
+
+    // ─── STEP 1: CAPTURE ────────────────────────────────────────────
+    async function capturePhoto() {
+        const btn = document.getElementById('btn-capture');
+        const errEl = document.getElementById('capture-error');
+        btn.disabled = true;
+        btn.textContent = 'Capturing…';
+        errEl.classList.add('hidden');
+
+        try {
+            const res = await fetch('/api/session/capture', { method: 'POST' });
+            const data = await res.json();
+            if (!data.ok) {
+                showError(errEl, data.detail || data.error || 'Capture failed');
+                return;
+            }
+            const photo = { ...data.photo, thumbnail_b64: data.thumbnail_b64 };
+            photos.push(photo);
+            renderPhotoStrip();
+            if (data.thumbnail_b64) {
+                const preview = document.getElementById('capture-preview');
+                preview.innerHTML = `<img src="${data.thumbnail_b64}" alt="Last capture">`;
+            }
+        } catch (e) {
+            showError(errEl, 'Network error: ' + e.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Capture Photo';
+        }
+    }
+
+    function renderPhotoStrip() {
+        const strip = document.getElementById('photo-strip');
+        strip.innerHTML = '';
+        photos.forEach(photo => {
+            const thumb = document.createElement('div');
+            thumb.className = 'photo-thumb';
+            const src = photo.thumbnail_b64 || '';
+            thumb.innerHTML = src
+                ? `<img src="${src}" alt="Photo">`
+                : `<div style="width:100%;height:100%;background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:#64748b">saved</div>`;
+            const delBtn = document.createElement('button');
+            delBtn.className = 'photo-thumb-delete';
+            delBtn.textContent = '×';
+            delBtn.title = 'Delete photo';
+            delBtn.addEventListener('click', () => deletePhoto(photo.id));
+            thumb.appendChild(delBtn);
+            strip.appendChild(thumb);
+        });
+        document.getElementById('photo-count-label').textContent =
+            photos.length + ' photo' + (photos.length !== 1 ? 's' : '');
+        document.getElementById('btn-step1-next').disabled = photos.length === 0;
+    }
+
+    async function deletePhoto(photoId) {
+        try {
+            const res = await fetch('/api/session/photos/' + photoId, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.ok) {
+                photos = photos.filter(p => p.id !== photoId);
+                renderPhotoStrip();
+                // Revert preview if no photos remain
+                if (photos.length === 0) {
+                    document.getElementById('capture-preview').innerHTML =
+                        '<span class="capture-placeholder">No photo yet</span>';
+                }
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    function clearPhotos() {
+        [...photos].forEach(p => deletePhoto(p.id));
+    }
+
+    // ─── STEP 2: MEASURE ────────────────────────────────────────────
+    function refreshStep2() {
+        setConnStatus(serialConnected);
+        updateReadingsDisplay();
+    }
+
+    async function connectSerial() {
+        const btn = document.getElementById('btn-serial-connect');
+        btn.disabled = true;
+        btn.textContent = 'Connecting…';
+        try {
+            const res = await fetch('/api/session/serial/connect', { method: 'POST' });
+            const data = await res.json();
+            serialConnected = data.ok && data.serial_connected;
+            setConnStatus(serialConnected);
+        } catch (e) {
+            setConnStatus(false);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Connect';
+        }
+    }
+
+    async function disconnectSerial() {
+        if (collecting) stopCollecting();
+        try {
+            await fetch('/api/session/serial/disconnect', { method: 'POST' });
+        } catch (e) { /* ignore */ }
+        serialConnected = false;
+        setConnStatus(false);
+    }
+
+    function setConnStatus(connected) {
+        const dot = document.getElementById('conn-dot');
+        const label = document.getElementById('conn-label');
+        const btnConnect = document.getElementById('btn-serial-connect');
+        const btnDisconnect = document.getElementById('btn-serial-disconnect');
+        const btnStart = document.getElementById('btn-start-collecting');
+
+        if (connected) {
+            dot.className = 'conn-dot connected';
+            label.textContent = 'Connected — /dev/ttyACM0';
+            btnConnect.classList.add('hidden');
+            btnDisconnect.classList.remove('hidden');
+            btnStart.disabled = false;
+        } else {
+            dot.className = 'conn-dot';
+            label.textContent = 'Not connected';
+            btnConnect.classList.remove('hidden');
+            btnDisconnect.classList.add('hidden');
+            btnStart.disabled = true;
+        }
+    }
+
+    function startCollecting() {
+        if (collecting) return;
+        collecting = true;
+        readings = [];
+        updateReadingsDisplay();
+
+        document.getElementById('btn-start-collecting').classList.add('hidden');
+        document.getElementById('btn-stop-collecting').classList.remove('hidden');
+
+        let lastSeq = 0;
+        const target = parseInt(document.getElementById('readings-target').value, 10);
+
+        sseSource = new EventSource('/api/session/readings/stream?last_seq=' + lastSeq);
+        sseSource.addEventListener('reading', e => {
+            try {
+                const frame = JSON.parse(e.data);
+                lastSeq = frame.seq || lastSeq;
+                readings.push(frame);
+                updateLiveRpDisplay(frame);
+                updateReadingsDisplay();
+                if (readings.length >= target) stopCollecting();
+            } catch (err) { /* ignore */ }
+        });
+        sseSource.onerror = () => {
+            if (collecting) {
+                document.getElementById('conn-dot').className = 'conn-dot';
+                document.getElementById('conn-label').textContent = 'Stream error — reconnecting…';
+            }
+        };
+    }
+
+    function stopCollecting() {
+        if (!collecting) return;
+        collecting = false;
+        if (sseSource) { sseSource.close(); sseSource = null; }
+        document.getElementById('btn-start-collecting').classList.remove('hidden');
+        document.getElementById('btn-stop-collecting').classList.add('hidden');
+        updateReadingsDisplay();
+    }
+
+    function updateLiveRpDisplay(frame) {
+        document.getElementById('live-rp').textContent =
+            frame.rp_ohm != null ? Math.round(frame.rp_ohm).toLocaleString('en-US') : '—';
+        document.getElementById('live-current').textContent =
+            frame.current_ua != null ? frame.current_ua.toFixed(3) : '—';
+        document.getElementById('live-asym').textContent =
+            frame.asym_percent != null ? frame.asym_percent.toFixed(1) : '—';
+
+        const badge = document.getElementById('live-status-badge');
+        const status = (frame.status || 'UNKNOWN').toUpperCase();
+        badge.textContent = status;
+        const cls = { EXCELLENT: 'status-healthy', HEALTHY: 'status-healthy',
+                      FAIR: 'status-warning', WARNING: 'status-warning',
+                      CRITICAL: 'status-critical', SEVERE: 'status-critical' };
+        badge.className = 'badge live-badge ' + (cls[status] || 'status-warning');
+    }
+
+    function updateReadingsDisplay() {
+        const target = parseInt(document.getElementById('readings-target').value, 10);
+        const count = readings.length;
+        document.getElementById('readings-count').textContent = count + ' collected';
+        const pct = Math.min(100, (count / target) * 100);
+        document.getElementById('readings-progress-bar').style.width = pct + '%';
+        document.getElementById('btn-step2-next').disabled = count < target;
+    }
+
+    // ─── STEP 3: ANALYZE ────────────────────────────────────────────
+    function refreshStep3Summary() {
+        const el = document.getElementById('analyze-summary');
+        el.textContent = photos.length + ' photo' + (photos.length !== 1 ? 's' : '') +
+                         ' · ' + readings.length + ' reading' + (readings.length !== 1 ? 's' : '');
+        document.getElementById('result-card').classList.add('hidden');
+        document.getElementById('analyze-error').classList.add('hidden');
+        document.getElementById('analyze-progress').classList.add('hidden');
+    }
+
+    async function runAnalysis() {
+        if (analyzeRunning) return;
+        analyzeRunning = true;
+
+        const errEl = document.getElementById('analyze-error');
+        errEl.classList.add('hidden');
+        document.getElementById('result-card').classList.add('hidden');
+        document.getElementById('btn-analyze').disabled = true;
+        document.getElementById('btn-step3-back').disabled = true;
+
+        const prog = document.getElementById('analyze-progress');
+        prog.classList.remove('hidden');
+
+        // Animate progress steps with staggered timing
+        const steps = ['prog-sensor', 'prog-vision', 'prog-fusion'];
+        steps.forEach(id => document.getElementById(id).classList.remove('done'));
+
+        // Brief visual stagger before actual fetch
+        setTimeout(() => document.getElementById('prog-sensor').classList.add('done'), 1000);
+        setTimeout(() => document.getElementById('prog-vision').classList.add('done'), 2000);
+
+        try {
+            const minReadings = parseInt(document.getElementById('readings-target').value, 10);
+            const res = await fetch('/api/session/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ min_readings: minReadings }),
+            });
+            const data = await res.json();
+
+            document.getElementById('prog-fusion').classList.add('done');
+            await delay(400);
+
+            if (!data.ok) {
+                showError(errEl, data.detail || data.error || 'Analysis failed');
+                return;
+            }
+            prog.classList.add('hidden');
+            renderResult(data);
+        } catch (e) {
+            showError(errEl, 'Network error: ' + e.message);
+            prog.classList.add('hidden');
+        } finally {
+            analyzeRunning = false;
+            document.getElementById('btn-analyze').disabled = false;
+            document.getElementById('btn-step3-back').disabled = false;
+        }
+    }
+
+    function renderResult(data) {
+        const fused = data.fused || {};
+        const sensor = data.sensor || {};
+        const vision = data.vision || {};
+
+        // Big metrics
+        const severity = fused.fused_severity_0_to_10 ?? '—';
+        const rul = fused.rul_days != null ? fused.rul_days.toFixed(1) : '—';
+        const conf = fused.confidence_0_to_1 != null ? Math.round(fused.confidence_0_to_1 * 100) : '—';
+
+        const sevEl = document.getElementById('res-severity');
+        sevEl.textContent = typeof severity === 'number' ? severity.toFixed(1) : severity;
+        sevEl.style.color = severity >= 7.5 ? 'var(--crit-text)' :
+                            severity >= 4.0 ? 'var(--warn-text)' : 'var(--ok-text)';
+        document.getElementById('res-rul').textContent = rul;
+        document.getElementById('res-confidence').textContent = conf;
+
+        // Badges
+        const badgesEl = document.getElementById('result-badges');
+        badgesEl.innerHTML = '';
+        const addBadge = (text, cls) => {
+            const b = document.createElement('div');
+            b.className = 'badge ' + cls;
+            b.textContent = text;
+            badgesEl.appendChild(b);
+        };
+        if (vision.rust_coverage_band) addBadge('Rust: ' + vision.rust_coverage_band, 'status-warning');
+        if (vision.morphology_class)   addBadge('Morph: ' + vision.morphology_class, 'status-warning');
+        if (fused.conflict_detected)   addBadge('Sensor/Vision Conflict', 'status-critical');
+        if (fused.degraded_mode)       addBadge('Degraded Mode', 'status-critical');
+
+        // Key findings
+        const findingsEl = document.getElementById('result-findings');
+        const allFindings = [...(sensor.key_findings || []), ...(vision.key_findings || [])];
+        findingsEl.innerHTML = allFindings.length
+            ? allFindings.map(f => '• ' + f).join('<br>')
+            : '';
+
+        // Rationale
+        const rationaleEl = document.getElementById('result-rationale');
+        rationaleEl.textContent = fused.rationale || '';
+
+        // RUL CI if available
+        const ci = fused.rul_confidence_interval_days;
+        if (ci) {
+            const rulEl = document.getElementById('res-rul');
+            rulEl.title = `CI: ${ci.low.toFixed(0)}–${ci.high.toFixed(0)} days`;
+        }
+
+        document.getElementById('result-card').classList.remove('hidden');
+    }
+
+    function newSession() {
+        photos = [];
+        readings = [];
+        serialConnected = false;
+        collecting = false;
+        if (sseSource) { sseSource.close(); sseSource = null; }
+        fetch('/api/session/new', { method: 'POST' }).catch(() => {});
+        renderPhotoStrip();
+        document.getElementById('capture-preview').innerHTML =
+            '<span class="capture-placeholder">No photo yet</span>';
+        document.getElementById('live-rp').textContent = '—';
+        document.getElementById('live-current').textContent = '—';
+        document.getElementById('live-asym').textContent = '—';
+        document.getElementById('live-status-badge').textContent = '—';
+        document.getElementById('result-card').classList.add('hidden');
+        document.getElementById('analyze-error').classList.add('hidden');
+        document.getElementById('analyze-progress').classList.add('hidden');
+        setConnStatus(false);
+        goToStep(1);
+    }
+
+    // ─── HELPERS ────────────────────────────────────────────────────
+    function showError(el, msg) {
+        el.textContent = msg;
+        el.classList.remove('hidden');
+    }
+
+    function delay(ms) {
+        return new Promise(r => setTimeout(r, ms));
+    }
+
+    return { init };
+})();

@@ -35,79 +35,265 @@
             </div>
         </header>
 
-        <section class="phases-timeline" id="phases_container">
-            <!-- Populated via JS -->
-        </section>
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="monitor">Monitor</button>
+            <button class="tab-btn" data-tab="lab-session">Lab Session</button>
+        </nav>
 
-        <div class="dashboard-grid">
-            <!-- Electrochemical Card -->
-            <div class="card stat-card" id="card_sensor">
-                <div class="card-header">
-                    <h3>Electrochemical Sensor</h3>
-                    <div class="badge" id="sensor_status">HEALTHY</div>
-                </div>
-                <div class="stat-value">
-                    <h2 class="animate-value" id="rp_ohm">0</h2>
-                    <span class="unit">Ω Rp</span>
-                </div>
-                <div class="stat-sub">
-                    <span><strong id="current_ma">0</strong> mA Current</span>
-                </div>
-            </div>
+        <!-- ─── MONITOR TAB ─── -->
+        <div class="tab-panel" id="tab-monitor">
+            <section class="phases-timeline" id="phases_container">
+                <!-- Populated via JS -->
+            </section>
 
-            <!-- Vision Engine Card -->
-            <div class="card stat-card" id="card_vision">
-                <div class="card-header">
-                    <h3>Vision AI Engine</h3>
-                    <div class="badge" id="vision_quality">FRESH</div>
+            <div class="dashboard-grid">
+                <div class="card stat-card" id="card_sensor">
+                    <div class="card-header">
+                        <h3>Electrochemical Sensor</h3>
+                        <div class="badge" id="sensor_status">HEALTHY</div>
+                    </div>
+                    <div class="stat-value">
+                        <h2 class="animate-value" id="rp_ohm">0</h2>
+                        <span class="unit">Ω Rp</span>
+                    </div>
+                    <div class="stat-sub">
+                        <span><strong id="current_ma">0</strong> mA Current</span>
+                    </div>
                 </div>
-                <div class="stat-value">
-                    <h2 class="animate-value" id="vision_severity">0.0</h2>
-                    <span class="unit">/ 10 Sev</span>
-                </div>
-                <div class="stat-sub" id="vision_flags_container">
-                    <span class="text-truncate">Quality: <strong id="vision_flags">None</strong></span>
-                </div>
-            </div>
 
-            <!-- Fused Confidence Card -->
-            <div class="card stat-card glow-card" id="card_confidence">
-                <div class="card-header">
-                    <h3>Fused AI Confidence</h3>
-                    <div class="pulse-indicator" id="confidence_pulse"></div>
+                <div class="card stat-card" id="card_vision">
+                    <div class="card-header">
+                        <h3>Vision AI Engine</h3>
+                        <div class="badge" id="vision_quality">FRESH</div>
+                    </div>
+                    <div class="stat-value">
+                        <h2 class="animate-value" id="vision_severity">0.0</h2>
+                        <span class="unit">/ 10 Sev</span>
+                    </div>
+                    <div class="stat-sub" id="vision_flags_container">
+                        <span class="text-truncate">Quality: <strong id="vision_flags">None</strong></span>
+                    </div>
                 </div>
-                <div class="stat-value">
-                    <h2 class="animate-value" id="confidence_percent">0</h2>
-                    <span class="unit">%</span>
+
+                <div class="card stat-card glow-card" id="card_confidence">
+                    <div class="card-header">
+                        <h3>Fused AI Confidence</h3>
+                        <div class="pulse-indicator" id="confidence_pulse"></div>
+                    </div>
+                    <div class="stat-value">
+                        <h2 class="animate-value" id="confidence_percent">0</h2>
+                        <span class="unit">%</span>
+                    </div>
+                    <div class="stat-sub">
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="confidence_bar"></div>
+                        </div>
+                    </div>
                 </div>
-                <div class="stat-sub">
-                    <div class="progress-bar-bg">
-                        <div class="progress-bar-fill" id="confidence_bar"></div>
+
+                <div class="card stat-card highlight" id="card_rul">
+                    <div class="card-header">
+                        <h3>RUL Prediction</h3>
+                    </div>
+                    <div class="stat-value">
+                        <h2 class="animate-value emphasis" id="rul_days">0.0</h2>
+                        <span class="unit">Days</span>
+                    </div>
+                    <div class="stat-sub">
+                        <span>Severity: <strong id="fused_severity">0.0</strong> / 10</span>
                     </div>
                 </div>
             </div>
 
-            <!-- Remaining Useful Life Card -->
-            <div class="card stat-card highlight" id="card_rul">
-                <div class="card-header">
-                    <h3>RUL Prediction</h3>
-                </div>
-                <div class="stat-value">
-                    <h2 class="animate-value emphasis" id="rul_days">0.0</h2>
-                    <span class="unit">Days</span>
-                </div>
-                <div class="stat-sub">
-                    <span>Severity: <strong id="fused_severity">0.0</strong> / 10</span>
-                </div>
+            <div class="controls-panel card">
+                <button class="btn btn-outlined" id="btn_pause">Pause Demo</button>
+                <button class="btn btn-outlined" id="btn_resume">Resume</button>
+                <button class="btn btn-primary" id="btn_recapture">Recapture Image</button>
+                <button class="btn btn-primary" id="btn_recompute">Force Recompute</button>
             </div>
         </div>
 
-        <div class="controls-panel card">
-            <button class="btn btn-outlined" id="btn_pause">Pause Demo</button>
-            <button class="btn btn-outlined" id="btn_resume">Resume</button>
-            <button class="btn btn-primary" id="btn_recapture">Recapture Image</button>
-            <button class="btn btn-primary" id="btn_recompute">Force Recompute</button>
+        <!-- ─── LAB SESSION TAB ─── -->
+        <div class="tab-panel hidden" id="tab-lab-session">
+
+            <!-- Horizontal Stepper -->
+            <div class="stepper">
+                <div class="stepper-step active" id="stepper-1">
+                    <div class="step-circle">1</div>
+                    <div class="step-label">Capture</div>
+                </div>
+                <div class="step-connector" id="connector-1-2"></div>
+                <div class="stepper-step" id="stepper-2">
+                    <div class="step-circle">2</div>
+                    <div class="step-label">Measure</div>
+                </div>
+                <div class="step-connector" id="connector-2-3"></div>
+                <div class="stepper-step" id="stepper-3">
+                    <div class="step-circle">3</div>
+                    <div class="step-label">Analyze</div>
+                </div>
+            </div>
+
+            <!-- Step 1: Surface Photos -->
+            <div class="step-panel" id="step-panel-1">
+                <div class="card step-card">
+                    <div class="step-card-header">
+                        <h3>Step 1 — Surface Photos</h3>
+                        <span class="step-hint">Capture 3–5 photos from different angles before immersion</span>
+                    </div>
+
+                    <div class="capture-layout">
+                        <div class="capture-preview-wrap">
+                            <div class="capture-preview" id="capture-preview">
+                                <span class="capture-placeholder">No photo yet</span>
+                            </div>
+                        </div>
+                        <div class="photo-strip-wrap">
+                            <div class="photo-strip" id="photo-strip">
+                                <!-- Thumbnails injected here -->
+                            </div>
+                            <p class="photo-count-label" id="photo-count-label">0 photos</p>
+                        </div>
+                    </div>
+
+                    <div class="step-actions">
+                        <button class="btn btn-primary" id="btn-capture">Capture Photo</button>
+                        <button class="btn btn-outlined" id="btn-clear-photos">Clear All</button>
+                        <span class="step-spacer"></span>
+                        <button class="btn btn-primary" id="btn-step1-next" disabled>Next →</button>
+                    </div>
+                    <p class="step-error hidden" id="capture-error"></p>
+                </div>
+            </div>
+
+            <!-- Step 2: Electrochemical Readings -->
+            <div class="step-panel hidden" id="step-panel-2">
+                <div class="card step-card">
+                    <div class="step-card-header">
+                        <h3>Step 2 — Electrochemical Readings</h3>
+                        <span class="step-hint">Submerge the sample and collect Rp readings from Teensy</span>
+                    </div>
+
+                    <!-- Connection status -->
+                    <div class="connection-bar">
+                        <div class="conn-status" id="conn-status">
+                            <span class="conn-dot" id="conn-dot"></span>
+                            <span id="conn-label">Not connected</span>
+                        </div>
+                        <button class="btn btn-outlined btn-sm" id="btn-serial-connect">Connect</button>
+                        <button class="btn btn-outlined btn-sm hidden" id="btn-serial-disconnect">Disconnect</button>
+                    </div>
+
+                    <!-- Live Rp reading -->
+                    <div class="live-reading-card" id="live-reading-card">
+                        <div class="live-reading-row">
+                            <span class="live-label">Rp</span>
+                            <span class="live-value" id="live-rp">—</span>
+                            <span class="live-unit">Ω</span>
+                            <div class="badge live-badge" id="live-status-badge">—</div>
+                        </div>
+                        <div class="live-reading-row">
+                            <span class="live-label">I</span>
+                            <span class="live-value live-value-sm" id="live-current">—</span>
+                            <span class="live-unit">µA</span>
+                            <span class="live-label" style="margin-left:1.5rem">Asym</span>
+                            <span class="live-value live-value-sm" id="live-asym">—</span>
+                            <span class="live-unit">%</span>
+                        </div>
+                    </div>
+
+                    <!-- Readings progress -->
+                    <div class="readings-progress">
+                        <div class="readings-target-row">
+                            <label class="readings-label">Target readings:</label>
+                            <select class="readings-select" id="readings-target">
+                                <option value="5">5</option>
+                                <option value="10" selected>10</option>
+                                <option value="15">15</option>
+                                <option value="20">20</option>
+                            </select>
+                            <span class="readings-count" id="readings-count">0 collected</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="readings-progress-bar"></div>
+                        </div>
+                    </div>
+
+                    <div class="step-actions">
+                        <button class="btn btn-outlined" id="btn-step2-back">← Back</button>
+                        <button class="btn btn-primary" id="btn-start-collecting" disabled>▶ Start Collecting</button>
+                        <button class="btn btn-outlined hidden" id="btn-stop-collecting">■ Stop</button>
+                        <span class="step-spacer"></span>
+                        <button class="btn btn-primary" id="btn-step2-next" disabled>Next →</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Analysis -->
+            <div class="step-panel hidden" id="step-panel-3">
+                <div class="card step-card">
+                    <div class="step-card-header">
+                        <h3>Step 3 — AI Analysis</h3>
+                        <span class="step-hint">Run vision + electrochemical fusion analysis</span>
+                    </div>
+
+                    <div class="analyze-launch" id="analyze-launch">
+                        <button class="btn btn-primary btn-lg" id="btn-analyze">Run Full AI Analysis</button>
+                        <p class="analyze-summary" id="analyze-summary"></p>
+                    </div>
+
+                    <!-- Progress during analysis -->
+                    <div class="analyze-progress hidden" id="analyze-progress">
+                        <div class="progress-step" id="prog-sensor">
+                            <span class="prog-spinner"></span>
+                            <span>Running sensor analysis…</span>
+                        </div>
+                        <div class="progress-step" id="prog-vision">
+                            <span class="prog-spinner"></span>
+                            <span>Running vision analysis…</span>
+                        </div>
+                        <div class="progress-step" id="prog-fusion">
+                            <span class="prog-spinner"></span>
+                            <span>Fusing results…</span>
+                        </div>
+                    </div>
+
+                    <!-- Result card -->
+                    <div class="result-card hidden" id="result-card">
+                        <div class="result-row">
+                            <div class="result-metric">
+                                <span class="result-label">Severity</span>
+                                <span class="result-big" id="res-severity">—</span>
+                                <span class="result-unit">/ 10</span>
+                            </div>
+                            <div class="result-metric">
+                                <span class="result-label">RUL</span>
+                                <span class="result-big" id="res-rul">—</span>
+                                <span class="result-unit">days</span>
+                            </div>
+                            <div class="result-metric">
+                                <span class="result-label">Confidence</span>
+                                <span class="result-big" id="res-confidence">—</span>
+                                <span class="result-unit">%</span>
+                            </div>
+                        </div>
+                        <div class="result-badges" id="result-badges"></div>
+                        <div class="result-findings" id="result-findings"></div>
+                        <div class="result-rationale" id="result-rationale"></div>
+                    </div>
+
+                    <p class="step-error hidden" id="analyze-error"></p>
+
+                    <div class="step-actions">
+                        <button class="btn btn-outlined" id="btn-step3-back">← Back</button>
+                        <span class="step-spacer"></span>
+                        <button class="btn btn-outlined" id="btn-new-session">New Session</button>
+                    </div>
+                </div>
+            </div>
+
         </div>
+        <!-- end lab-session tab -->
 
         <footer class="disclaimer">
             * Educational / Laboratory Prototype. Not for industrial safety-critical use.
