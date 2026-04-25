@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
+import json
 import http.server
 import socketserver
-import json
 import time
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -25,6 +25,47 @@ DASHBOARD_JSON = SESSION_DIR / "dashboard-latest.json"
 SSE_HEARTBEAT_SECONDS = 5.0
 
 serial_reader = SerialFrameReader(port=DEFAULT_PORT, baud=DEFAULT_BAUD, max_frames=2000)
+
+
+def _default_state_payload():
+    return {
+        "cycle_id": "waiting",
+        "phase": "baseline",
+        "rp_ohm": 65000,
+        "current_ma": 0.15,
+        "sensor_status_band": "healthy",
+        "vision_severity_0_to_10": 1.5,
+        "fused_severity_0_to_10": 1.6,
+        "rul_days": 310.5,
+        "confidence_0_to_1": 0.85,
+        "degraded_mode": False,
+        "stale": False,
+        "vision_quality_flags": [],
+        "paused": False,
+        "phase_markers": ["baseline", "acceleration", "active", "severe", "fresh_swap"],
+    }
+
+
+def _load_dashboard_payload():
+    if not DASHBOARD_JSON.exists():
+        return _default_state_payload()
+
+    text = DASHBOARD_JSON.read_text(encoding="utf-8").strip()
+    if not text:
+        return _default_state_payload()
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Some writers append multiple JSON objects to the same file.
+        # Decode the first valid object so /api/state remains available.
+        try:
+            decoder = json.JSONDecoder()
+            obj, _ = decoder.raw_decode(text)
+            return obj
+        except json.JSONDecodeError:
+            print(f"Warning: malformed dashboard JSON in {DASHBOARD_JSON}; using default state")
+            return _default_state_payload()
 
 
 def _frame_to_payload(frame):
@@ -109,25 +150,7 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_state(self):
-        if DASHBOARD_JSON.exists():
-            payload = json.loads(DASHBOARD_JSON.read_text(encoding="utf-8"))
-        else:
-            payload = {
-                "cycle_id": "waiting",
-                "phase": "baseline",
-                "rp_ohm": 65000,
-                "current_ma": 0.15,
-                "sensor_status_band": "healthy",
-                "vision_severity_0_to_10": 1.5,
-                "fused_severity_0_to_10": 1.6,
-                "rul_days": 310.5,
-                "confidence_0_to_1": 0.85,
-                "degraded_mode": False,
-                "stale": False,
-                "vision_quality_flags": [],
-                "paused": False,
-                "phase_markers": ["baseline", "acceleration", "active", "severe", "fresh_swap"],
-            }
+        payload = _load_dashboard_payload()
         self._send_json(200, payload)
 
     def _handle_control(self):
