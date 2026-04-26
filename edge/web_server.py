@@ -528,9 +528,21 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(502, {"ok": False, "error": "camera_error", "detail": str(exc)})
             return
 
-        if result.returncode != 0 or not Path(path).exists():
-            self._send_json(502, {"ok": False, "error": "capture_failed",
-                                   "detail": result.stderr.decode(errors="replace")})
+        stderr_text = getattr(result, "stderr", b"")
+        stdout_text = getattr(result, "stdout", b"")
+        if isinstance(stderr_text, bytes):
+            stderr_text = stderr_text.decode(errors="replace")
+        if isinstance(stdout_text, bytes):
+            stdout_text = stdout_text.decode(errors="replace")
+
+        output_path = Path(path)
+        file_ready = output_path.exists()
+        if not file_ready:
+            self._send_json(502, {
+                "ok": False,
+                "error": "capture_failed",
+                "detail": stderr_text or stdout_text,
+            })
             return
 
         dimensions: tuple[int, int] | None = None
@@ -547,7 +559,13 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             pass
 
         photo = session_state.add_photo(path, dimensions=dimensions)
-        self._send_json(201, {"ok": True, "photo": photo, "thumbnail_b64": thumb_b64})
+        payload = {"ok": True, "photo": photo, "thumbnail_b64": thumb_b64}
+        if result.returncode != 0:
+            payload["capture_warning"] = {
+                "code": result.returncode,
+                "detail": stderr_text or "camera exited non-zero after writing image",
+            }
+        self._send_json(201, payload)
 
     def _session_analyze(self):
         t0 = time.time()
