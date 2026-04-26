@@ -505,39 +505,46 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         photos_dir.mkdir(parents=True, exist_ok=True)
         path = str(photos_dir / f"{photo_id}.jpg")
 
-        camera_bin = None
-        for candidate in ("rpicam-still", "libcamera-still"):
-            if shutil.which(candidate):
-                camera_bin = candidate
-                break
+        camera_bins = [candidate for candidate in ("rpicam-still", "libcamera-still") if shutil.which(candidate)]
 
-        if camera_bin is None:
+        if not camera_bins:
             self._send_json(503, {"ok": False, "error": "camera_not_available",
                                    "detail": "rpicam-still / libcamera-still not found"})
             return
 
-        try:
-            result = subprocess.run(
-                [camera_bin, "-n", "--width", "1280", "--height", "720", "-o", path],
-                capture_output=True, timeout=15,
-            )
-        except subprocess.TimeoutExpired:
-            self._send_json(504, {"ok": False, "error": "camera_timeout"})
-            return
-        except Exception as exc:
-            self._send_json(502, {"ok": False, "error": "camera_error", "detail": str(exc)})
-            return
-
-        stderr_text = getattr(result, "stderr", b"")
-        stdout_text = getattr(result, "stdout", b"")
-        if isinstance(stderr_text, bytes):
-            stderr_text = stderr_text.decode(errors="replace")
-        if isinstance(stdout_text, bytes):
-            stdout_text = stdout_text.decode(errors="replace")
-
+        result = None
+        stderr_text = ""
+        stdout_text = ""
+        timeout_hit = False
         output_path = Path(path)
-        file_ready = output_path.exists()
-        if not file_ready:
+
+        for camera_bin in camera_bins:
+            try:
+                result = subprocess.run(
+                    [camera_bin, "-n", "--width", "1280", "--height", "720", "-o", path],
+                    capture_output=True, timeout=15,
+                )
+            except subprocess.TimeoutExpired:
+                timeout_hit = True
+                continue
+            except Exception as exc:
+                stderr_text = str(exc)
+                continue
+
+            stderr_text = getattr(result, "stderr", b"")
+            stdout_text = getattr(result, "stdout", b"")
+            if isinstance(stderr_text, bytes):
+                stderr_text = stderr_text.decode(errors="replace")
+            if isinstance(stdout_text, bytes):
+                stdout_text = stdout_text.decode(errors="replace")
+
+            if output_path.exists():
+                break
+
+        if not output_path.exists():
+            if timeout_hit and not stderr_text and not stdout_text:
+                self._send_json(504, {"ok": False, "error": "camera_timeout"})
+                return
             self._send_json(502, {
                 "ok": False,
                 "error": "capture_failed",
@@ -560,7 +567,7 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
 
         photo = session_state.add_photo(path, dimensions=dimensions)
         payload = {"ok": True, "photo": photo, "thumbnail_b64": thumb_b64}
-        if result.returncode != 0:
+        if result is not None and result.returncode != 0:
             payload["capture_warning"] = {
                 "code": result.returncode,
                 "detail": stderr_text or "camera exited non-zero after writing image",
