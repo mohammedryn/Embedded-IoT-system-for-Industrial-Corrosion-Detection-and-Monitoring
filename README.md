@@ -2,6 +2,8 @@
 
 <div align="center">
 
+<img src="assets/images/banner.png" alt="Corrosion Monitor Banner" width="100%">
+
 <h1>Corrosion Monitor</h1>
 
 <h3>Real-Time Corrosion Detection.<br/>Custom Potentiostat · Computer Vision · Multi-Agent AI · Edge Deployment.</h3>
