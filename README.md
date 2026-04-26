@@ -212,5 +212,3 @@ PRD acceptance criterion: < ±5%. Systematic offset confirmed as Rf tolerance (p
 > This project is open source under the [MIT License](LICENSE). Contributions are welcome — open an issue first to discuss what you'd like to change. For hardware questions, include your wiring configuration and serial output. See [log/project_log.md](log/project_log.md) for the complete development history, every circuit issue encountered, and how each was resolved.
 
 ---
-
-<p align="center">Ramaiah Institute of Technology (MSRIT), Bengaluru · Electronics and Instrumentation Engineering · B.Tech Final Year, April 2026</p>
