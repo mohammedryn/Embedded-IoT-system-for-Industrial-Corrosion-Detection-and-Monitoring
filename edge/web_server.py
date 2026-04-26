@@ -8,6 +8,7 @@ import os
 import shutil
 import socketserver
 import subprocess
+import tempfile
 import threading
 import time
 import uuid as _uuid
@@ -517,11 +518,28 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         stdout_text = ""
         timeout_hit = False
         output_path = Path(path)
+        tmp_capture_path = Path(tempfile.gettempdir()) / f"capture-{photo_id}.jpg"
+        try:
+            if tmp_capture_path.exists():
+                tmp_capture_path.unlink()
+        except OSError:
+            pass
 
         for camera_bin in camera_bins:
             try:
                 result = subprocess.run(
-                    [camera_bin, "-n", "--width", "1280", "--height", "720", "-o", path],
+                    [
+                        camera_bin,
+                        "-n",
+                        "--immediate",
+                        "--nopreview",
+                        "--width",
+                        "1280",
+                        "--height",
+                        "720",
+                        "-o",
+                        str(tmp_capture_path),
+                    ],
                     capture_output=True, timeout=15,
                 )
             except subprocess.TimeoutExpired:
@@ -538,10 +556,10 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             if isinstance(stdout_text, bytes):
                 stdout_text = stdout_text.decode(errors="replace")
 
-            if output_path.exists():
+            if tmp_capture_path.exists():
                 break
 
-        if not output_path.exists():
+        if not tmp_capture_path.exists():
             if timeout_hit and not stderr_text and not stdout_text:
                 self._send_json(504, {"ok": False, "error": "camera_timeout"})
                 return
@@ -549,6 +567,16 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
                 "ok": False,
                 "error": "capture_failed",
                 "detail": stderr_text or stdout_text,
+            })
+            return
+
+        try:
+            shutil.move(str(tmp_capture_path), str(output_path))
+        except Exception as exc:
+            self._send_json(502, {
+                "ok": False,
+                "error": "capture_failed",
+                "detail": f"captured temp image but failed moving to session path: {exc}",
             })
             return
 
