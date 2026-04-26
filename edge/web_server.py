@@ -44,6 +44,136 @@ _specialist_service = None
 _specialist_init_error = ""
 
 
+class _CameraPreviewWorker:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._thread = None
+        self._process = None
+        self._latest_frame = None
+        self._latest_frame_time = 0.0
+        self._running = False
+        self._buffer = bytearray()
+        self._start_error = ""
+
+    def start(self):
+        with self._lock:
+            if self._running:
+                return
+            self._running = True
+            self._thread = threading.Thread(target=self._run, daemon=True)
+            self._thread.start()
+
+    def stop(self):
+        with self._lock:
+            self._running = False
+            process = self._process
+            self._process = None
+        if process is not None:
+            try:
+                process.terminate()
+            except Exception:
+                pass
+
+    def status(self):
+        with self._lock:
+            return {
+                "running": self._running,
+                "ready": self._latest_frame is not None,
+                "age_seconds": round(time.time() - self._latest_frame_time, 3) if self._latest_frame_time else None,
+                "error": self._start_error,
+            }
+
+    def latest_frame(self):
+        with self._lock:
+            return self._latest_frame, self._latest_frame_time, self._start_error
+
+    def _run(self):
+        camera_bins = [candidate for candidate in ("rpicam-vid", "libcamera-vid") if shutil.which(candidate)]
+        if not camera_bins:
+            with self._lock:
+                self._start_error = "rpicam-vid / libcamera-vid not found"
+                self._running = False
+            return
+
+        cmd = [
+            camera_bins[0],
+            "-n",
+            "-t",
+            "0",
+            "--codec",
+            "mjpeg",
+            "--low-latency",
+            "--width",
+            "640",
+            "--height",
+            "360",
+            "-o",
+            "-",
+        ]
+
+        try:
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except Exception as exc:
+            with self._lock:
+                self._start_error = str(exc)
+                self._running = False
+            return
+
+        with self._lock:
+            self._process = process
+            self._start_error = ""
+
+        stdout = process.stdout
+        if stdout is None:
+            with self._lock:
+                self._start_error = "camera preview stdout unavailable"
+                self._running = False
+            return
+
+        soi = b"\xff\xd8"
+        eoi = b"\xff\xd9"
+
+        try:
+            while True:
+                with self._lock:
+                    if not self._running:
+                        break
+
+                chunk = stdout.read(4096)
+                if not chunk:
+                    break
+
+                self._buffer.extend(chunk)
+                while True:
+                    start = self._buffer.find(soi)
+                    if start < 0:
+                        if len(self._buffer) > 2:
+                            self._buffer[:] = self._buffer[-1:]
+                        break
+                    end = self._buffer.find(eoi, start + 2)
+                    if end < 0:
+                        if start > 0:
+                            del self._buffer[:start]
+                        break
+
+                    frame = bytes(self._buffer[start:end + 2])
+                    del self._buffer[:end + 2]
+                    with self._lock:
+                        self._latest_frame = frame
+                        self._latest_frame_time = time.time()
+        finally:
+            try:
+                process.terminate()
+            except Exception:
+                pass
+            with self._lock:
+                self._process = None
+                self._running = False
+
+
+_camera_preview_worker = _CameraPreviewWorker()
+
+
 def _get_vision_pipeline():
     global _vision_pipeline
     if _vision_pipeline is None:
@@ -128,6 +258,10 @@ def _analysis_runtime_meta(svc) -> dict:
         "specialists_ready": False,
         "message": message,
     }
+
+
+def _ensure_camera_preview_worker():
+    _camera_preview_worker.start()
 
 
 def _best_vision_result(photos: list, cycle_id: str) -> dict | None:
@@ -545,18 +679,20 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(404, {"ok": False, "error": "photo_not_found"})
 
     def _session_camera_preview(self):
-        preview_id = _uuid.uuid4().hex
-        camera_bins = [candidate for candidate in ("rpicam-still", "libcamera-still") if shutil.which(candidate)]
-
-        if not camera_bins:
-            self._send_json(503, {"ok": False, "error": "camera_not_available",
-                                  "detail": "rpicam-still / libcamera-still not found"})
+        _ensure_camera_preview_worker()
+        frame, frame_time, start_error = _camera_preview_worker.latest_frame()
+        if frame is not None:
+            self._send_jpeg(frame)
             return
 
-        result = None
-        stderr_text = ""
-        stdout_text = ""
-        timeout_hit = False
+        # Fallback: if the worker has not delivered a frame yet, try a one-shot still capture.
+        preview_id = _uuid.uuid4().hex
+        camera_bins = [candidate for candidate in ("rpicam-still", "libcamera-still") if shutil.which(candidate)]
+        if not camera_bins:
+            self._send_json(503, {"ok": False, "error": "camera_not_available",
+                                  "detail": start_error or "rpicam-still / libcamera-still not found"})
+            return
+
         tmp_preview_path = Path(tempfile.gettempdir()) / f"preview-{preview_id}.jpg"
         try:
             if tmp_preview_path.exists():
@@ -564,55 +700,53 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         except OSError:
             pass
 
+        result = None
+        stderr_text = ""
+        stdout_text = ""
+        timeout_hit = False
+        for camera_bin in camera_bins:
+            try:
+                result = subprocess.run(
+                    [
+                        camera_bin,
+                        "-n",
+                        "--immediate",
+                        "--nopreview",
+                        "--width",
+                        "960",
+                        "--height",
+                        "540",
+                        "-o",
+                        str(tmp_preview_path),
+                    ],
+                    capture_output=True,
+                    timeout=10,
+                )
+            except subprocess.TimeoutExpired:
+                timeout_hit = True
+                continue
+            except Exception as exc:
+                stderr_text = str(exc)
+                continue
+
+            stderr_text = getattr(result, "stderr", b"")
+            stdout_text = getattr(result, "stdout", b"")
+            if isinstance(stderr_text, bytes):
+                stderr_text = stderr_text.decode(errors="replace")
+            if isinstance(stdout_text, bytes):
+                stdout_text = stdout_text.decode(errors="replace")
+
+            if tmp_preview_path.exists():
+                break
+
         try:
-            for camera_bin in camera_bins:
-                try:
-                    result = subprocess.run(
-                        [
-                            camera_bin,
-                            "-n",
-                            "--immediate",
-                            "--nopreview",
-                            "--width",
-                            "960",
-                            "--height",
-                            "540",
-                            "-o",
-                            str(tmp_preview_path),
-                        ],
-                        capture_output=True,
-                        timeout=10,
-                    )
-                except subprocess.TimeoutExpired:
-                    timeout_hit = True
-                    continue
-                except Exception as exc:
-                    stderr_text = str(exc)
-                    continue
-
-                stderr_text = getattr(result, "stderr", b"")
-                stdout_text = getattr(result, "stdout", b"")
-                if isinstance(stderr_text, bytes):
-                    stderr_text = stderr_text.decode(errors="replace")
-                if isinstance(stdout_text, bytes):
-                    stdout_text = stdout_text.decode(errors="replace")
-
-                if tmp_preview_path.exists():
-                    break
-
-            if not tmp_preview_path.exists():
-                if timeout_hit and not stderr_text and not stdout_text:
-                    self._send_json(504, {"ok": False, "error": "camera_timeout"})
-                    return
-                self._send_json(502, {
-                    "ok": False,
-                    "error": "preview_failed",
-                    "detail": stderr_text or stdout_text,
-                })
+            if tmp_preview_path.exists():
+                self._send_jpeg(tmp_preview_path.read_bytes())
                 return
-
-            image_bytes = tmp_preview_path.read_bytes()
-            self._send_jpeg(image_bytes)
+            if timeout_hit and not stderr_text and not stdout_text:
+                self._send_json(504, {"ok": False, "error": "camera_timeout"})
+                return
+            self._send_json(502, {"ok": False, "error": "preview_failed", "detail": stderr_text or stdout_text})
         finally:
             try:
                 if tmp_preview_path.exists():
