@@ -819,6 +819,32 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         photos_dir.mkdir(parents=True, exist_ok=True)
         path = str(photos_dir / f"{photo_id}.jpg")
 
+        _ensure_camera_preview_worker()
+        preview_frame, _, _ = _camera_preview_worker.latest_frame()
+        if preview_frame is not None:
+            try:
+                Path(path).write_bytes(preview_frame)
+                dimensions: tuple[int, int] | None = None
+                thumb_b64 = ""
+                try:
+                    from PIL import Image
+                    img = Image.open(io.BytesIO(preview_frame))
+                    dimensions = (img.width, img.height)
+                    img.thumbnail((320, 180))
+                    buf = io.BytesIO()
+                    img.save(buf, format="JPEG", quality=70)
+                    thumb_b64 = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+                except Exception:
+                    pass
+
+                photo = session_state.add_photo(path, dimensions=dimensions)
+                payload = {"ok": True, "photo": photo, "thumbnail_b64": thumb_b64}
+                self._send_json(201, payload)
+                return
+            except Exception as exc:
+                self._send_json(502, {"ok": False, "error": "capture_failed", "detail": str(exc)})
+                return
+
         camera_bins = [candidate for candidate in ("rpicam-still", "libcamera-still") if shutil.which(candidate)]
 
         if not camera_bins:

@@ -249,6 +249,31 @@ def test_capture_falls_back_to_libcamera(running_server):
     assert captured_bin[0] == "libcamera-still"
 
 
+def test_capture_uses_preview_frame_when_available(running_server):
+    host, port, monkeypatch = running_server
+    web_server.session_state.new_session()
+
+    class _FakeWorker:
+        def start(self):
+            return None
+
+        def latest_frame(self):
+            return (b"fake-preview-jpeg", 123.456, "")
+
+    monkeypatch.setattr(web_server, "_camera_preview_worker", _FakeWorker())
+    monkeypatch.setattr(web_server, "_ensure_camera_preview_worker", lambda: None)
+    monkeypatch.setattr(web_server.subprocess, "run", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("capture should not reacquire camera")))
+    monkeypatch.setattr(web_server.shutil, "which",
+                        lambda name: f"/usr/bin/{name}" if name in {"rpicam-still", "libcamera-still"} else None)
+
+    status, raw = _request_json("POST", host, port, "/api/session/capture")
+    assert status == 201
+    payload = json.loads(raw.decode())
+    assert payload["ok"] is True
+    assert payload["photo"]["id"]
+    assert payload["photo"]["path"]
+
+
 def test_camera_preview_returns_jpeg(running_server):
     host, port, monkeypatch = running_server
 
