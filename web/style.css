@@ -601,6 +601,12 @@ h1 strong {
     font-size: 0.85rem;
 }
 
+.capture-preview-status {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    margin-top: 0.5rem;
+}
+
 .photo-strip-wrap {
     flex: 1;
     min-width: 0;
@@ -799,6 +805,12 @@ h1 strong {
 .analyze-summary {
     color: var(--text-muted);
     font-size: 0.9rem;
+}
+
+.analyze-runtime {
+    color: var(--text-main);
+    font-size: 0.9rem;
+    margin: 0;
 }
 
 .analyze-progress {

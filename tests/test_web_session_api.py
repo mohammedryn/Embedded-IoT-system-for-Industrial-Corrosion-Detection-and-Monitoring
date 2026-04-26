@@ -40,6 +40,17 @@ def _request_json(method: str, host: str, port: int, path: str, body: dict | Non
     return response.status, raw
 
 
+def _request_raw(method: str, host: str, port: int, path: str):
+    conn = http.client.HTTPConnection(host, port, timeout=3)
+    conn.request(method, path)
+    response = conn.getresponse()
+    status = response.status
+    headers = {k.lower(): v for k, v in response.getheaders()}
+    raw = response.read()
+    conn.close()
+    return status, headers, raw
+
+
 def test_session_new_endpoint(running_server):
     host, port, _ = running_server
     status, raw = _request_json("POST", host, port, "/api/session/new")
@@ -236,6 +247,39 @@ def test_capture_falls_back_to_libcamera(running_server):
     status, raw = _request_json("POST", host, port, "/api/session/capture")
     assert status == 201
     assert captured_bin[0] == "libcamera-still"
+
+
+def test_camera_preview_returns_jpeg(running_server):
+    host, port, monkeypatch = running_server
+
+    def fake_run(cmd, **kwargs):
+        Path(cmd[cmd.index("-o") + 1]).write_bytes(b"fake-jpeg-bytes")
+
+        class _FakeResult:
+            returncode = 0
+            stderr = b""
+
+        return _FakeResult()
+
+    monkeypatch.setattr(web_server.subprocess, "run", fake_run)
+    monkeypatch.setattr(web_server.shutil, "which",
+                        lambda name: f"/usr/bin/{name}" if name == "rpicam-still" else None)
+
+    status, headers, raw = _request_raw("GET", host, port, "/api/session/camera/preview")
+    assert status == 200
+    assert headers.get("content-type") == "image/jpeg"
+    assert raw == b"fake-jpeg-bytes"
+
+
+def test_camera_preview_no_camera_returns_503(running_server):
+    host, port, monkeypatch = running_server
+    monkeypatch.setattr(web_server.shutil, "which", lambda name: None)
+
+    status, raw = _request_json("GET", host, port, "/api/session/camera/preview")
+    assert status == 503
+    payload = json.loads(raw.decode())
+    assert payload["ok"] is False
+    assert payload["error"] == "camera_not_available"
 
 
 def test_capture_no_camera_returns_503(running_server):

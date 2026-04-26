@@ -41,6 +41,7 @@ _vision_pipeline = None
 _fusion_service = None
 _specialist_init_attempted = False
 _specialist_service = None
+_specialist_init_error = ""
 
 
 def _get_vision_pipeline():
@@ -83,7 +84,7 @@ class _GeminiModelClient:
 
 def _get_specialist_service():
     """Return a SpecialistService wired to Gemini if GOOGLE_API_KEY is set, else None."""
-    global _specialist_init_attempted, _specialist_service
+    global _specialist_init_attempted, _specialist_service, _specialist_init_error
     if not _specialist_init_attempted:
         with _svc_lock:
             if not _specialist_init_attempted:
@@ -96,9 +97,37 @@ def _get_specialist_service():
                             client=_GeminiModelClient(),
                             settings=load_ai_settings(PROJECT_ROOT),
                         )
-                    except Exception:
-                        pass
+                        _specialist_init_error = ""
+                    except Exception as exc:
+                        _specialist_init_error = f"init_failed:{type(exc).__name__}"
+                else:
+                    _specialist_init_error = "api_key_missing"
     return _specialist_service
+
+
+def _analysis_runtime_meta(svc) -> dict:
+    api_key_present = bool(os.environ.get("GOOGLE_API_KEY"))
+    if svc is not None:
+        return {
+            "mode": "gemini_specialists",
+            "api_key_present": api_key_present,
+            "specialists_ready": True,
+            "message": "Gemini specialists enabled",
+        }
+
+    if not api_key_present:
+        message = "GOOGLE_API_KEY missing; using local heuristic mode"
+    elif _specialist_init_error:
+        message = f"Gemini unavailable ({_specialist_init_error}); using local heuristic mode"
+    else:
+        message = "Gemini unavailable; using local heuristic mode"
+
+    return {
+        "mode": "local_heuristic",
+        "api_key_present": api_key_present,
+        "specialists_ready": False,
+        "message": message,
+    }
 
 
 def _best_vision_result(photos: list, cycle_id: str) -> dict | None:
@@ -319,6 +348,9 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         if route == "/api/session/photos":
             self._session_photos()
             return
+        if route == "/api/session/camera/preview":
+            self._session_camera_preview()
+            return
 
         super().do_GET()
 
@@ -372,6 +404,14 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_jpeg(self, image_bytes: bytes):
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        self.send_header("Content-Length", str(len(image_bytes)))
+        self.end_headers()
+        self.wfile.write(image_bytes)
 
     def _serve_state(self):
         payload = _load_dashboard_payload()
@@ -504,6 +544,82 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         else:
             self._send_json(404, {"ok": False, "error": "photo_not_found"})
 
+    def _session_camera_preview(self):
+        preview_id = _uuid.uuid4().hex
+        camera_bins = [candidate for candidate in ("rpicam-still", "libcamera-still") if shutil.which(candidate)]
+
+        if not camera_bins:
+            self._send_json(503, {"ok": False, "error": "camera_not_available",
+                                  "detail": "rpicam-still / libcamera-still not found"})
+            return
+
+        result = None
+        stderr_text = ""
+        stdout_text = ""
+        timeout_hit = False
+        tmp_preview_path = Path(tempfile.gettempdir()) / f"preview-{preview_id}.jpg"
+        try:
+            if tmp_preview_path.exists():
+                tmp_preview_path.unlink()
+        except OSError:
+            pass
+
+        try:
+            for camera_bin in camera_bins:
+                try:
+                    result = subprocess.run(
+                        [
+                            camera_bin,
+                            "-n",
+                            "--immediate",
+                            "--nopreview",
+                            "--width",
+                            "960",
+                            "--height",
+                            "540",
+                            "-o",
+                            str(tmp_preview_path),
+                        ],
+                        capture_output=True,
+                        timeout=10,
+                    )
+                except subprocess.TimeoutExpired:
+                    timeout_hit = True
+                    continue
+                except Exception as exc:
+                    stderr_text = str(exc)
+                    continue
+
+                stderr_text = getattr(result, "stderr", b"")
+                stdout_text = getattr(result, "stdout", b"")
+                if isinstance(stderr_text, bytes):
+                    stderr_text = stderr_text.decode(errors="replace")
+                if isinstance(stdout_text, bytes):
+                    stdout_text = stdout_text.decode(errors="replace")
+
+                if tmp_preview_path.exists():
+                    break
+
+            if not tmp_preview_path.exists():
+                if timeout_hit and not stderr_text and not stdout_text:
+                    self._send_json(504, {"ok": False, "error": "camera_timeout"})
+                    return
+                self._send_json(502, {
+                    "ok": False,
+                    "error": "preview_failed",
+                    "detail": stderr_text or stdout_text,
+                })
+                return
+
+            image_bytes = tmp_preview_path.read_bytes()
+            self._send_jpeg(image_bytes)
+        finally:
+            try:
+                if tmp_preview_path.exists():
+                    tmp_preview_path.unlink()
+            except OSError:
+                pass
+
     def _session_capture(self):
         photo_id = _uuid.uuid4().hex
         photos_dir = PROJECT_ROOT / "data" / "sessions" / session_state.session_id / "photos"
@@ -630,6 +746,7 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
 
         cycle_id = f"lab-{_uuid.uuid4().hex[:12]}"
         svc = _get_specialist_service()
+        ai_runtime = _analysis_runtime_meta(svc)
         specialist_timeout_seconds = 30.0
 
         if svc is not None:
@@ -728,6 +845,7 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             "cycle_id": cycle_id,
             "input_counts": {"photos": len(photos), "readings": len(readings)},
             "ai_specialists_used": svc is not None,
+            "ai_runtime": ai_runtime,
             "sensor": sensor_payload,
             "vision": vision_payload,
             "fused": fused,

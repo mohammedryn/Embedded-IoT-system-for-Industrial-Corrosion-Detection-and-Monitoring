@@ -186,6 +186,9 @@ const LabSession = (() => {
     let collecting = false;
     let serialConnected = false;
     let analyzeRunning = false;
+    let previewTimer = null;
+    let previewBusy = false;
+    let previewObjectUrl = null;
 
     function init() {
         // Step navigation
@@ -195,6 +198,7 @@ const LabSession = (() => {
         document.getElementById('btn-step3-back').addEventListener('click', () => goToStep(2));
 
         // Step 1
+        document.getElementById('btn-refresh-preview').addEventListener('click', () => refreshCameraPreview(true));
         document.getElementById('btn-capture').addEventListener('click', capturePhoto);
         document.getElementById('btn-clear-photos').addEventListener('click', clearPhotos);
 
@@ -210,6 +214,7 @@ const LabSession = (() => {
 
         // Initialize new server-side session
         fetch('/api/session/new', { method: 'POST' }).catch(() => {});
+        startCameraPreviewLoop();
     }
 
     // ─── STEP NAVIGATION ────────────────────────────────────────────
@@ -230,11 +235,67 @@ const LabSession = (() => {
 
         currentStep = n;
 
+        if (n === 1) startCameraPreviewLoop();
+        else stopCameraPreviewLoop();
+
         if (n === 2) refreshStep2();
         if (n === 3) refreshStep3Summary();
     }
 
     // ─── STEP 1: CAPTURE ────────────────────────────────────────────
+    function setPreviewStatus(message, isError) {
+        const el = document.getElementById('capture-preview-status');
+        el.textContent = message;
+        el.style.color = isError ? 'var(--crit-text)' : 'var(--text-muted)';
+    }
+
+    async function refreshCameraPreview(manual = false) {
+        if (previewBusy) return;
+        previewBusy = true;
+        if (manual) setPreviewStatus('Refreshing preview...', false);
+
+        try {
+            const res = await fetch('/api/session/camera/preview?ts=' + Date.now(), { cache: 'no-store' });
+            if (!res.ok) {
+                let msg = 'Preview unavailable';
+                try {
+                    const err = await res.json();
+                    msg = err.detail || err.error || msg;
+                } catch (_) {
+                    // no-op
+                }
+                setPreviewStatus('Preview error: ' + msg, true);
+                return;
+            }
+
+            const blob = await res.blob();
+            if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+            previewObjectUrl = URL.createObjectURL(blob);
+            const preview = document.getElementById('capture-preview');
+            preview.innerHTML = `<img src="${previewObjectUrl}" alt="Live camera preview">`;
+            setPreviewStatus('Live preview updated at ' + new Date().toLocaleTimeString(), false);
+        } catch (e) {
+            setPreviewStatus('Preview error: ' + e.message, true);
+        } finally {
+            previewBusy = false;
+        }
+    }
+
+    function startCameraPreviewLoop() {
+        if (previewTimer) return;
+        refreshCameraPreview(false);
+        previewTimer = setInterval(() => {
+            refreshCameraPreview(false);
+        }, 2500);
+    }
+
+    function stopCameraPreviewLoop() {
+        if (previewTimer) {
+            clearInterval(previewTimer);
+            previewTimer = null;
+        }
+    }
+
     async function capturePhoto() {
         const btn = document.getElementById('btn-capture');
         const errEl = document.getElementById('capture-error');
@@ -252,10 +313,8 @@ const LabSession = (() => {
             const photo = { ...data.photo, thumbnail_b64: data.thumbnail_b64 };
             photos.push(photo);
             renderPhotoStrip();
-            if (data.thumbnail_b64) {
-                const preview = document.getElementById('capture-preview');
-                preview.innerHTML = `<img src="${data.thumbnail_b64}" alt="Last capture">`;
-            }
+            setPreviewStatus('Captured successfully at ' + new Date().toLocaleTimeString(), false);
+            refreshCameraPreview(false);
         } catch (e) {
             showError(errEl, 'Network error: ' + e.message);
         } finally {
@@ -432,9 +491,26 @@ const LabSession = (() => {
         const el = document.getElementById('analyze-summary');
         el.textContent = photos.length + ' photo' + (photos.length !== 1 ? 's' : '') +
                          ' · ' + readings.length + ' reading' + (readings.length !== 1 ? 's' : '');
+        const aiEl = document.getElementById('analyze-runtime-status');
+        aiEl.textContent = 'AI mode: unknown (run analysis to detect runtime mode)';
         document.getElementById('result-card').classList.add('hidden');
         document.getElementById('analyze-error').classList.add('hidden');
         document.getElementById('analyze-progress').classList.add('hidden');
+    }
+
+    function renderAiRuntimeStatus(data) {
+        const el = document.getElementById('analyze-runtime-status');
+        const runtime = data && data.ai_runtime ? data.ai_runtime : null;
+        if (!runtime) {
+            el.textContent = 'AI mode: unknown';
+            return;
+        }
+        const modeLabel = runtime.mode === 'gemini_specialists'
+            ? 'Gemini specialists'
+            : 'Local heuristic fallback';
+        const keyLabel = runtime.api_key_present ? 'API key present' : 'API key missing';
+        const details = runtime.message ? ' - ' + runtime.message : '';
+        el.textContent = 'AI mode: ' + modeLabel + ' (' + keyLabel + ')' + details;
     }
 
     async function runAnalysis() {
@@ -472,6 +548,7 @@ const LabSession = (() => {
             });
             clearTimeout(timeoutId);
             const data = await res.json();
+            renderAiRuntimeStatus(data);
 
             document.getElementById('prog-fusion').classList.add('done');
             await delay(400);
@@ -558,7 +635,8 @@ const LabSession = (() => {
         fetch('/api/session/new', { method: 'POST' }).catch(() => {});
         renderPhotoStrip();
         document.getElementById('capture-preview').innerHTML =
-            '<span class="capture-placeholder">No photo yet</span>';
+            '<span class="capture-placeholder">Loading camera preview...</span>';
+        setPreviewStatus('Starting live preview...', false);
         document.getElementById('live-rp').textContent = '—';
         document.getElementById('live-current').textContent = '—';
         document.getElementById('live-asym').textContent = '—';
@@ -568,6 +646,7 @@ const LabSession = (() => {
         document.getElementById('analyze-progress').classList.add('hidden');
         setConnStatus(false);
         goToStep(1);
+        refreshCameraPreview(false);
     }
 
     // ─── HELPERS ────────────────────────────────────────────────────
