@@ -115,54 +115,61 @@ Industrial infrastructure monitoring with focus on:
 
 ### 2.1 Overall System Block Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                       SYSTEM ARCHITECTURE                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌───────────────────────────────────────────────────────────┐     │
-│  │  3-ELECTRODE POTENTIOSTAT CIRCUIT                         │     │
-│  │  Counter (Graphite) │ Reference (Ag/AgCl) │ Working (WE)  │     │
-│  │                                                           │     │
-│  │  Op-amp A: Unity-gain buffer (DAC isolator)               │     │
-│  │  Op-amp B: Transimpedance amplifier (TIA), Rf = 100 kΩ   │     │
-│  │  Op-amp C (Stage 2): RE follower (potentiostatic loop)    │     │
-│  │  MCP4725 12-bit DAC  ←→  ADS1115 16-bit ADC (I2C @ 400k) │     │
-│  └─────────────────────────┬─────────────────────────────────┘     │
-│                             │ USB Serial 115200 baud               │
-│                             │ FRAME:Rp:...;I:...;status:...;asym:..│
-│  ┌──────────────────────────▼─────────────────────────────────┐    │
-│  │  TEENSY 4.1  (ARM Cortex-M7 @ 600 MHz)                     │    │
-│  │  • ±10 mV sine at 0.1 Hz → DAC                             │    │
-│  │  • ADC reads TIA output (800 samples/cycle)                 │    │
-│  │  • Peak detection, Rp = V_applied / I_peak                  │    │
-│  │  • Asymmetry detection (>15% triggers WARN)                 │    │
-│  │  • Commands: set rf, set samples, set mode, bias, expect    │    │
-│  └──────────────────────────┬─────────────────────────────────┘    │
-│                             │ USB Serial                           │
-│  ┌──────────────────────────▼─────────────────────────────────┐    │
-│  │  RASPBERRY PI 5 (Ubuntu 24.04 LTS)                          │    │
-│  │                                                              │    │
-│  │  edge/serial_reader.py  → parses FRAME lines                │    │
-│  │  edge/session_state.py  → session store (photos + readings) │    │
-│  │  edge/web_server.py     → HTTP + SSE (ThreadingHTTPServer)  │    │
-│  │  vision/pipeline.py     → rpicam-still + HSV + Gemini       │    │
-│  │  fusion/specialists.py  → Gemini sensor + vision agents     │    │
-│  │  fusion/c06.py          → weighted fusion, conflict, RUL    │    │
-│  │  fusion/c07.py          → phase state machine, dashboard    │    │
-│  │  web/                   → HTML/JS/CSS live dashboard UI      │    │
-│  │                                                              │    │
-│  │  Pi HQ Camera (Sony IMX477) ─→ rpicam-still capture         │    │
-│  └──────────────────────────┬─────────────────────────────────┘    │
-│                             │ HTTPS/REST                           │
-│  ┌──────────────────────────▼─────────────────────────────────┐    │
-│  │  GOOGLE GEMINI API (Gemini 3 Flash, when configured)        │    │
-│  │  • Sensor Specialist  (electrochemical analysis)            │    │
-│  │  • Vision Specialist  (rust coverage, morphology)           │    │
-│  │  • Fusion (cross-modal, RUL, severity 0–10)                 │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+  subgraph POT["3-ELECTRODE POTENTIOSTAT CIRCUIT"]
+    CE["Counter Electrode (Graphite)"]
+    RE["Reference Electrode (Ag/AgCl)"]
+    WE["Working Electrode (WE)"]
+    OPAA["Op-amp A\nUnity-gain buffer (DAC isolator)"]
+    OPAB["Op-amp B\nTransimpedance amplifier (TIA), Rf = 100 kΩ"]
+    OPAC["Op-amp C (Stage 2)\nRE follower (potentiostatic loop)"]
+    DAC["MCP4725 12-bit DAC"]
+    ADC["ADS1115 16-bit ADC"]
+    I2CBUS["I2C Bus (400 kHz)"]
+
+    DAC --- I2CBUS
+    ADC --- I2CBUS
+    OPAA --> CE
+    RE --> OPAC
+    WE --> OPAB
+  end
+
+  subgraph T41["TEENSY 4.1 (ARM Cortex-M7 @ 600 MHz)"]
+    T1["±10 mV sine at 0.1 Hz → DAC"]
+    T2["ADC reads TIA output (800 samples/cycle)"]
+    T3["Peak detection; Rp = V_applied / I_peak"]
+    T4["Asymmetry detection (>15% triggers WARN)"]
+    T5["Commands: set rf, set samples, set mode, bias, expect"]
+  end
+
+  subgraph PI5["RASPBERRY PI 5 (Ubuntu 24.04 LTS)"]
+    SR["edge/serial_reader.py\nParses FRAME lines"]
+    SS["edge/session_state.py\nSession store (photos + readings)"]
+    WS["edge/web_server.py\nHTTP + SSE (ThreadingHTTPServer)"]
+    VP["vision/pipeline.py\nrpicam-still/libcamera + HSV analysis"]
+    FS["fusion/specialists.py\nSensor + vision specialists"]
+    F6["fusion/c06.py\nWeighted fusion, conflict, RUL"]
+    F7["fusion/c07.py\nPhase state machine, dashboard state"]
+    WEB["web/\nHTML/JS/CSS live dashboard UI"]
+
+    SR --> SS
+    SS --> WS
+    VP --> FS
+    SS --> FS
+    FS --> F6 --> F7 --> WS
+    WS --> WEB
+  end
+
+  CAM["Pi HQ Camera (Sony IMX477)"]
+  GEMINI["Google Gemini API\nGemini 3 Flash (when configured)"]
+  BROWSER["Browser Dashboard"]
+
+  T41 <-->|"I2C @ 400 kHz"| I2CBUS
+  T41 -->|"USB Serial 115200\nFRAME:Rp:...;I:...;status:...;asym:..."| SR
+  CAM -->|"CSI-2 capture"| VP
+  WS -->|"HTTP/SSE"| BROWSER
+  FS <-->|"HTTPS/REST"| GEMINI
 ```
 
 ### 2.2 Data Flow
