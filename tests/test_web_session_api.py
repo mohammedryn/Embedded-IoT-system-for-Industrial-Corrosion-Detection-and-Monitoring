@@ -271,6 +271,38 @@ def test_camera_preview_returns_jpeg(running_server):
     assert raw == b"fake-jpeg-bytes"
 
 
+def test_camera_stream_returns_mjpeg(running_server):
+    host, port, monkeypatch = running_server
+
+    class _FakeWorker:
+        def __init__(self):
+            self.calls = 0
+
+        def start(self):
+            return None
+
+        def latest_frame(self):
+            self.calls += 1
+            return (b"fake-mjpeg-frame", 123.456, "")
+
+    fake_worker = _FakeWorker()
+    monkeypatch.setattr(web_server, "_camera_preview_worker", fake_worker)
+    monkeypatch.setattr(web_server, "_ensure_camera_preview_worker", lambda: None)
+
+    conn = http.client.HTTPConnection(host, port, timeout=3)
+    conn.request("GET", "/api/session/camera/stream")
+    response = conn.getresponse()
+
+    assert response.status == 200
+    assert response.getheader("Content-Type") == "multipart/x-mixed-replace; boundary=frame"
+
+    chunk = response.fp.read1(256)
+    conn.close()
+
+    assert b"--frame" in chunk
+    assert b"fake-mjpeg-frame" in chunk
+
+
 def test_camera_preview_no_camera_returns_503(running_server):
     host, port, monkeypatch = running_server
     monkeypatch.setattr(web_server.shutil, "which", lambda name: None)

@@ -103,6 +103,8 @@ class _CameraPreviewWorker:
             "--codec",
             "mjpeg",
             "--low-latency",
+            "--framerate",
+            "12",
             "--width",
             "640",
             "--height",
@@ -112,7 +114,7 @@ class _CameraPreviewWorker:
         ]
 
         try:
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         except Exception as exc:
             with self._lock:
                 self._start_error = str(exc)
@@ -139,7 +141,10 @@ class _CameraPreviewWorker:
                     if not self._running:
                         break
 
-                chunk = stdout.read(4096)
+                if hasattr(stdout, "read1"):
+                    chunk = stdout.read1(65536)
+                else:
+                    chunk = stdout.read(65536)
                 if not chunk:
                     break
 
@@ -485,6 +490,9 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         if route == "/api/session/camera/preview":
             self._session_camera_preview()
             return
+        if route == "/api/session/camera/stream":
+            self._session_camera_stream()
+            return
 
         super().do_GET()
 
@@ -546,6 +554,57 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(image_bytes)))
         self.end_headers()
         self.wfile.write(image_bytes)
+
+    def _send_mjpeg_frame(self, image_bytes: bytes):
+        boundary = b"--frame"
+        header = (
+            boundary + b"\r\n"
+            + b"Content-Type: image/jpeg\r\n"
+            + f"Content-Length: {len(image_bytes)}\r\n\r\n".encode("utf-8")
+        )
+        self.wfile.write(header)
+        self.wfile.write(image_bytes)
+        self.wfile.write(b"\r\n")
+
+    def _session_camera_stream(self):
+        _ensure_camera_preview_worker()
+
+        deadline = time.time() + 10.0
+        frame = None
+        frame_time = 0.0
+        start_error = ""
+        while time.time() < deadline:
+            frame, frame_time, start_error = _camera_preview_worker.latest_frame()
+            if frame is not None:
+                break
+            if start_error:
+                self._send_json(503, {"ok": False, "error": "camera_not_available", "detail": start_error})
+                return
+            time.sleep(0.1)
+
+        if frame is None:
+            self._send_json(504, {"ok": False, "error": "camera_timeout", "detail": "camera preview did not become ready"})
+            return
+
+        self.send_response(200)
+        self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+
+        last_sent_time = 0.0
+        try:
+            while True:
+                frame, frame_time, _ = _camera_preview_worker.latest_frame()
+                if frame is not None and frame_time > last_sent_time:
+                    self._send_mjpeg_frame(frame)
+                    self.wfile.flush()
+                    last_sent_time = frame_time
+                else:
+                    time.sleep(0.08)
+        except (BrokenPipeError, ConnectionResetError):
+            return
 
     def _serve_state(self):
         payload = _load_dashboard_payload()

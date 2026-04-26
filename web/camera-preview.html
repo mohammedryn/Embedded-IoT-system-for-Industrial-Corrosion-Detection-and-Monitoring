@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Preview</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="preview-window">
+    <div class="preview-shell">
+        <div class="preview-header">
+            <div>
+                <h1 class="preview-title">Live Camera Preview</h1>
+                <p class="preview-subtitle">Adjust angle and focus here, then capture into the active lab session.</p>
+            </div>
+            <div class="preview-toolbar">
+                <button class="btn btn-primary" id="btn-preview-capture">Capture Photo</button>
+                <button class="btn btn-outlined" id="btn-preview-refresh">Reconnect Stream</button>
+                <button class="btn btn-outlined" id="btn-preview-close">Close Window</button>
+            </div>
+        </div>
+
+        <section class="card preview-stage">
+            <img class="preview-stream" id="preview-stream" alt="Live camera feed" src="/api/session/camera/stream">
+            <div class="preview-overlay">
+                <div class="preview-status" id="preview-status">Connecting to camera stream…</div>
+                <div class="badge status-warning" id="preview-session-status">Live preview</div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const streamImg = document.getElementById('preview-stream');
+        const statusEl = document.getElementById('preview-status');
+        const captureBtn = document.getElementById('btn-preview-capture');
+        const refreshBtn = document.getElementById('btn-preview-refresh');
+        const closeBtn = document.getElementById('btn-preview-close');
+
+        function setStatus(message, isError = false) {
+            statusEl.textContent = message;
+            statusEl.style.color = isError ? 'var(--crit-text)' : 'var(--text-muted)';
+        }
+
+        function reconnectStream() {
+            setStatus('Reconnecting to live stream…', false);
+            streamImg.src = '/api/session/camera/stream?ts=' + Date.now();
+        }
+
+        streamImg.addEventListener('load', () => {
+            setStatus('Live stream active. Move the sample and capture when ready.', false);
+        });
+
+        streamImg.addEventListener('error', () => {
+            setStatus('Live stream unavailable. Reconnect or check the Pi camera.', true);
+        });
+
+        refreshBtn.addEventListener('click', reconnectStream);
+
+        captureBtn.addEventListener('click', async () => {
+            captureBtn.disabled = true;
+            captureBtn.textContent = 'Capturing…';
+            setStatus('Capturing current frame into the active session…', false);
+
+            try {
+                const res = await fetch('/api/session/capture', { method: 'POST' });
+                const data = await res.json();
+                if (!data.ok) {
+                    setStatus(data.detail || data.error || 'Capture failed', true);
+                    return;
+                }
+
+                setStatus('Capture saved. The main Lab Session page has been refreshed.', false);
+                if (window.opener && !window.opener.closed) {
+                    window.opener.postMessage({ type: 'lab-session-refresh' }, window.location.origin);
+                }
+            } catch (e) {
+                setStatus('Capture failed: ' + e.message, true);
+            } finally {
+                captureBtn.disabled = false;
+                captureBtn.textContent = 'Capture Photo';
+            }
+        });
+
+        closeBtn.addEventListener('click', () => window.close());
+
+        window.addEventListener('keydown', e => {
+            if (e.key === 'Escape') window.close();
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (window.opener && !window.opener.closed) {
+                window.opener.focus();
+            }
+        });
+    </script>
+</body>
+</html>

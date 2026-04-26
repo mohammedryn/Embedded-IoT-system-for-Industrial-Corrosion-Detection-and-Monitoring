@@ -186,9 +186,7 @@ const LabSession = (() => {
     let collecting = false;
     let serialConnected = false;
     let analyzeRunning = false;
-    let previewTimer = null;
-    let previewBusy = false;
-    let previewObjectUrl = null;
+    let previewWindow = null;
 
     function init() {
         // Step navigation
@@ -198,7 +196,14 @@ const LabSession = (() => {
         document.getElementById('btn-step3-back').addEventListener('click', () => goToStep(2));
 
         // Step 1
-        document.getElementById('btn-refresh-preview').addEventListener('click', () => refreshCameraPreview(true));
+        document.getElementById('btn-open-preview').addEventListener('click', openPreviewWindow);
+        document.getElementById('capture-preview').addEventListener('click', openPreviewWindow);
+        document.getElementById('capture-preview').addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openPreviewWindow();
+            }
+        });
         document.getElementById('btn-capture').addEventListener('click', capturePhoto);
         document.getElementById('btn-clear-photos').addEventListener('click', clearPhotos);
 
@@ -212,9 +217,13 @@ const LabSession = (() => {
         document.getElementById('btn-analyze').addEventListener('click', runAnalysis);
         document.getElementById('btn-new-session').addEventListener('click', newSession);
 
+        window.addEventListener('message', event => {
+            if (!event || !event.data || event.data.type !== 'lab-session-refresh') return;
+            syncSessionPhotos();
+        });
+
         // Initialize new server-side session
-        fetch('/api/session/new', { method: 'POST' }).catch(() => {});
-        startCameraPreviewLoop();
+        fetch('/api/session/new', { method: 'POST' }).then(() => syncSessionPhotos()).catch(() => {});
     }
 
     // ─── STEP NAVIGATION ────────────────────────────────────────────
@@ -235,9 +244,6 @@ const LabSession = (() => {
 
         currentStep = n;
 
-        if (n === 1) startCameraPreviewLoop();
-        else stopCameraPreviewLoop();
-
         if (n === 2) refreshStep2();
         if (n === 3) refreshStep3Summary();
     }
@@ -249,50 +255,43 @@ const LabSession = (() => {
         el.style.color = isError ? 'var(--crit-text)' : 'var(--text-muted)';
     }
 
-    async function refreshCameraPreview(manual = false) {
-        if (previewBusy) return;
-        previewBusy = true;
-        if (manual) setPreviewStatus('Refreshing preview...', false);
+    function renderCapturePreview(photo) {
+        const preview = document.getElementById('capture-preview');
+        if (photo && photo.thumbnail_b64) {
+            preview.innerHTML = `<img src="${photo.thumbnail_b64}" alt="Latest capture">`;
+            setPreviewStatus('Latest capture shown. Click to open live preview.', false);
+            return;
+        }
+        preview.innerHTML = '<span class="capture-placeholder">Open live preview window</span>';
+        setPreviewStatus('Click the preview box to open the live camera window', false);
+    }
 
+    async function syncSessionPhotos() {
         try {
-            const res = await fetch('/api/session/camera/preview?ts=' + Date.now(), { cache: 'no-store' });
-            if (!res.ok) {
-                let msg = 'Preview unavailable';
-                try {
-                    const err = await res.json();
-                    msg = err.detail || err.error || msg;
-                } catch (_) {
-                    // no-op
-                }
-                setPreviewStatus('Preview error: ' + msg, true);
-                return;
+            const res = await fetch('/api/session/photos');
+            const data = await res.json();
+            if (data.ok) {
+                photos = data.photos || [];
+                renderPhotoStrip();
+                renderCapturePreview(photos.length ? photos[photos.length - 1] : null);
             }
-
-            const blob = await res.blob();
-            if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
-            previewObjectUrl = URL.createObjectURL(blob);
-            const preview = document.getElementById('capture-preview');
-            preview.innerHTML = `<img src="${previewObjectUrl}" alt="Live camera preview">`;
-            setPreviewStatus('Live preview updated at ' + new Date().toLocaleTimeString(), false);
         } catch (e) {
-            setPreviewStatus('Preview error: ' + e.message, true);
-        } finally {
-            previewBusy = false;
+            // ignore sync failures
         }
     }
 
-    function startCameraPreviewLoop() {
-        if (previewTimer) return;
-        refreshCameraPreview(false);
-        previewTimer = setInterval(() => {
-            refreshCameraPreview(false);
-        }, 2500);
-    }
-
-    function stopCameraPreviewLoop() {
-        if (previewTimer) {
-            clearInterval(previewTimer);
-            previewTimer = null;
+    function openPreviewWindow() {
+        const features = 'width=1200,height=900,resizable=yes,scrollbars=yes,status=yes,noopener=no';
+        if (previewWindow && !previewWindow.closed) {
+            previewWindow.focus();
+            return;
+        }
+        previewWindow = window.open('/camera-preview.html', 'corrosion-camera-preview', features);
+        if (previewWindow) {
+            previewWindow.focus();
+            setPreviewStatus('Preview window opened. Adjust angle there, then capture.', false);
+        } else {
+            setPreviewStatus('Popup blocked. Allow popups for this site and try again.', true);
         }
     }
 
@@ -310,11 +309,11 @@ const LabSession = (() => {
                 showError(errEl, data.detail || data.error || 'Capture failed');
                 return;
             }
-            const photo = { ...data.photo, thumbnail_b64: data.thumbnail_b64 };
-            photos.push(photo);
-            renderPhotoStrip();
+            await syncSessionPhotos();
             setPreviewStatus('Captured successfully at ' + new Date().toLocaleTimeString(), false);
-            refreshCameraPreview(false);
+            if (previewWindow && !previewWindow.closed && previewWindow.opener) {
+                previewWindow.focus();
+            }
         } catch (e) {
             showError(errEl, 'Network error: ' + e.message);
         } finally {
@@ -634,9 +633,7 @@ const LabSession = (() => {
         if (sseSource) { sseSource.close(); sseSource = null; }
         fetch('/api/session/new', { method: 'POST' }).catch(() => {});
         renderPhotoStrip();
-        document.getElementById('capture-preview').innerHTML =
-            '<span class="capture-placeholder">Loading camera preview...</span>';
-        setPreviewStatus('Starting live preview...', false);
+        renderCapturePreview(null);
         document.getElementById('live-rp').textContent = '—';
         document.getElementById('live-current').textContent = '—';
         document.getElementById('live-asym').textContent = '—';
@@ -646,7 +643,7 @@ const LabSession = (() => {
         document.getElementById('analyze-progress').classList.add('hidden');
         setConnStatus(false);
         goToStep(1);
-        refreshCameraPreview(false);
+        syncSessionPhotos();
     }
 
     // ─── HELPERS ────────────────────────────────────────────────────

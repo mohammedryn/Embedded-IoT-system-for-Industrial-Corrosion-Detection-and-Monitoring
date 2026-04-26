@@ -144,10 +144,10 @@
 
                     <div class="capture-layout">
                         <div class="capture-preview-wrap">
-                            <div class="capture-preview" id="capture-preview">
-                                <span class="capture-placeholder">Loading camera preview...</span>
+                            <div class="capture-preview capture-preview-launcher" id="capture-preview" role="button" tabindex="0" aria-label="Open camera preview window">
+                                <span class="capture-placeholder">Open live preview window</span>
                             </div>
-                            <p class="capture-preview-status" id="capture-preview-status">Preview not started</p>
+                            <p class="capture-preview-status" id="capture-preview-status">Click the preview box to open the live camera window</p>
                         </div>
                         <div class="photo-strip-wrap">
                             <div class="photo-strip" id="photo-strip">
@@ -158,7 +158,7 @@
                     </div>
 
                     <div class="step-actions">
-                        <button class="btn btn-outlined" id="btn-refresh-preview">Refresh Preview</button>
+                        <button class="btn btn-outlined" id="btn-open-preview">Open Preview Window</button>
                         <button class="btn btn-primary" id="btn-capture">Capture Photo</button>
                         <button class="btn btn-outlined" id="btn-clear-photos">Clear All</button>
                         <span class="step-spacer"></span>
