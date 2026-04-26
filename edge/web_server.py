@@ -69,12 +69,16 @@ class _GeminiModelClient:
     def generate(self, *, model_id: str, prompt: str, timeout_seconds: float) -> str:
         import google.generativeai as genai
         model = genai.GenerativeModel(model_id)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            fut = ex.submit(lambda: model.generate_content(prompt).text)
-            try:
-                return fut.result(timeout=timeout_seconds)
-            except concurrent.futures.TimeoutError:
-                raise TimeoutError(f"Gemini {model_id} exceeded {timeout_seconds}s")
+        ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        fut = ex.submit(lambda: model.generate_content(prompt).text)
+        try:
+            return fut.result(timeout=timeout_seconds)
+        except concurrent.futures.TimeoutError:
+            fut.cancel()
+            raise TimeoutError(f"Gemini {model_id} exceeded {timeout_seconds}s")
+        finally:
+            # Do not wait for a stuck model call thread; the request path already timed out.
+            ex.shutdown(wait=False, cancel_futures=True)
 
 
 def _get_specialist_service():
@@ -626,6 +630,7 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
 
         cycle_id = f"lab-{_uuid.uuid4().hex[:12]}"
         svc = _get_specialist_service()
+        specialist_timeout_seconds = 30.0
 
         if svc is not None:
             # AI specialist path: sensor and vision both route through Gemini concurrently.
@@ -668,10 +673,20 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
                 sf = pool.submit(_sensor_fn)
                 vf = pool.submit(_vision_fn)
-                sensor_payload = sf.result()
-                ts1 = time.time()
-                vision_payload = vf.result()
-                tv1 = time.time()
+                try:
+                    sensor_payload = sf.result(timeout=specialist_timeout_seconds)
+                    ts1 = time.time()
+                    vision_payload = vf.result(timeout=specialist_timeout_seconds)
+                    tv1 = time.time()
+                except concurrent.futures.TimeoutError:
+                    sf.cancel()
+                    vf.cancel()
+                    self._send_json(504, {
+                        "ok": False,
+                        "error": "analysis_timeout",
+                        "detail": f"AI specialist call exceeded {int(specialist_timeout_seconds)}s",
+                    })
+                    return
             timing_sensor_ms = (ts1 - t_spec) * 1000
             timing_vision_ms = (tv1 - t_spec) * 1000
         else:

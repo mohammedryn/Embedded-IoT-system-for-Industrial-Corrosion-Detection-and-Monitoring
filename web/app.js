@@ -449,6 +449,7 @@ const LabSession = (() => {
 
         const prog = document.getElementById('analyze-progress');
         prog.classList.remove('hidden');
+        let timeoutId = null;
 
         // Animate progress steps with staggered timing
         const steps = ['prog-sensor', 'prog-vision', 'prog-fusion'];
@@ -460,11 +461,16 @@ const LabSession = (() => {
 
         try {
             const minReadings = parseInt(document.getElementById('readings-target').value, 10);
+            const controller = new AbortController();
+            const timeoutMs = 45000;
+            timeoutId = setTimeout(() => controller.abort(), timeoutMs);
             const res = await fetch('/api/session/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ min_readings: minReadings }),
+                signal: controller.signal,
             });
+            clearTimeout(timeoutId);
             const data = await res.json();
 
             document.getElementById('prog-fusion').classList.add('done');
@@ -477,9 +483,14 @@ const LabSession = (() => {
             prog.classList.add('hidden');
             renderResult(data);
         } catch (e) {
-            showError(errEl, 'Network error: ' + e.message);
+            if (e && e.name === 'AbortError') {
+                showError(errEl, 'Analysis timed out after 45s. Check GOOGLE_API_KEY and server logs, then retry.');
+            } else {
+                showError(errEl, 'Network error: ' + e.message);
+            }
             prog.classList.add('hidden');
         } finally {
+            if (timeoutId) clearTimeout(timeoutId);
             analyzeRunning = false;
             document.getElementById('btn-analyze').disabled = false;
             document.getElementById('btn-step3-back').disabled = false;
