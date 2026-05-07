@@ -577,6 +577,7 @@ const LabSession = (() => {
         const fused = data.fused || {};
         const sensor = data.sensor || {};
         const vision = data.vision || {};
+        const report = data.report || {};
 
         // Big metrics
         const severity = fused.fused_severity_0_to_10 ?? '—';
@@ -610,6 +611,47 @@ const LabSession = (() => {
         findingsEl.innerHTML = allFindings.length
             ? allFindings.map(f => '• ' + f).join('<br>')
             : '';
+
+        const reportEl = document.getElementById('result-report');
+        const reportHeadlineEl = document.getElementById('result-report-headline');
+        const reportOverviewEl = document.getElementById('result-report-overview');
+        const reportSectionsEl = document.getElementById('result-report-sections');
+        const reportConclusionEl = document.getElementById('result-report-conclusion');
+
+        if (report && (report.overview || report.sections || report.conclusion)) {
+            reportHeadlineEl.textContent = report.headline || 'Electrochemical Assessment';
+            reportOverviewEl.textContent = report.overview || '';
+            reportSectionsEl.innerHTML = '';
+
+            (report.sections || []).forEach(section => {
+                const block = document.createElement('section');
+                block.className = 'result-report-section';
+
+                const title = document.createElement('h5');
+                title.className = 'result-report-section-title';
+                title.textContent = section.title || 'Section';
+                block.appendChild(title);
+
+                const list = document.createElement('ul');
+                list.className = 'result-report-list';
+                (section.items || []).forEach(item => {
+                    const li = document.createElement('li');
+                    li.textContent = item;
+                    list.appendChild(li);
+                });
+                block.appendChild(list);
+                reportSectionsEl.appendChild(block);
+            });
+
+            reportConclusionEl.textContent = report.conclusion || '';
+            reportEl.classList.remove('hidden');
+        } else {
+            reportHeadlineEl.textContent = '';
+            reportOverviewEl.textContent = '';
+            reportSectionsEl.innerHTML = '';
+            reportConclusionEl.textContent = '';
+            reportEl.classList.add('hidden');
+        }
 
         // Rationale
         const rationaleEl = document.getElementById('result-rationale');

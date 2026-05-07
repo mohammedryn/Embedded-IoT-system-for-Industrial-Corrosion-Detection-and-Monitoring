@@ -385,6 +385,172 @@ def _build_vision_payload(vision_result: dict, cycle_id: str) -> dict:
     }
 
 
+def _fmt_ohm(value: float) -> str:
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.2f} MOhm"
+    if value >= 1_000:
+        return f"{value / 1_000:.1f} kOhm"
+    return f"{value:.0f} Ohm"
+
+
+def _fmt_current_ma(value_ma: float) -> str:
+    ua = value_ma * 1000.0
+    if abs(ua) >= 1000.0:
+        return f"{value_ma:.3f} mA"
+    return f"{ua:.3f} uA"
+
+
+def _extract_count_from_findings(findings: list[str]) -> int | None:
+    for item in findings:
+        if item.startswith("n=") and item.endswith("_readings"):
+            try:
+                return int(item[2:].split("_", 1)[0])
+            except ValueError:
+                return None
+    return None
+
+
+def _electrochemical_band(rp_ohm: float) -> tuple[str, str]:
+    if rp_ohm <= 0:
+        return (
+            "invalid_response",
+            "The reported polarization resistance is non-physical, which usually indicates wiring, polarity, or cell instability.",
+        )
+    if rp_ohm < 1_000:
+        return (
+            "severe_active_corrosion",
+            "The polarization resistance is extremely low, which is consistent with aggressive active corrosion or a major setup fault.",
+        )
+    if rp_ohm < 5_000:
+        return (
+            "active_corrosion",
+            "The polarization resistance is low and consistent with active corrosion rather than a passive surface.",
+        )
+    if rp_ohm < 10_000:
+        return (
+            "moderate_corrosion",
+            "The polarization resistance suggests moderate corrosion activity and loss of passivity.",
+        )
+    if rp_ohm < 50_000:
+        return (
+            "mild_to_moderate_activity",
+            "The polarization resistance suggests mild to moderate electrochemical activity. The surface is not as passive as fresh healthy steel.",
+        )
+    if rp_ohm < 100_000:
+        return (
+            "passive_to_mild_activity",
+            "The polarization resistance is in a healthy range for this project and is more consistent with a mostly passive surface than active corrosion.",
+        )
+    return (
+        "strongly_passive_surface",
+        "The polarization resistance is very high for this setup, which is consistent with a strongly passive or only minimally corroding surface.",
+    )
+
+
+def _build_analysis_report(
+    *,
+    sensor_payload: dict,
+    vision_payload: dict,
+    fused_payload: dict,
+    input_counts: dict[str, int],
+    ai_runtime: dict,
+) -> dict:
+    rp_ohm = float(sensor_payload.get("rp_ohm", 0.0) or 0.0)
+    current_ma = float(sensor_payload.get("current_ma", 0.0) or 0.0)
+    status_band = str(sensor_payload.get("status_band", "unknown"))
+    sensor_conf = float(sensor_payload.get("confidence_0_to_1", 0.0) or 0.0)
+    vision_conf = float(vision_payload.get("confidence_0_to_1", 0.0) or 0.0)
+    fused_conf = float(fused_payload.get("confidence_0_to_1", 0.0) or 0.0)
+    fused_severity = float(fused_payload.get("fused_severity_0_to_10", 0.0) or 0.0)
+    rul_days = float(fused_payload.get("rul_days", 0.0) or 0.0)
+    conflict = bool(fused_payload.get("conflict_detected", False))
+    sensor_quality = list(sensor_payload.get("quality_flags", []))
+    sensor_uncertainty = list(sensor_payload.get("uncertainty_drivers", []))
+    vision_quality = list(vision_payload.get("quality_flags", []))
+    rust_band = str(vision_payload.get("rust_coverage_band", "unknown"))
+    morphology = str(vision_payload.get("morphology_class", "unknown"))
+    reading_count = _extract_count_from_findings(list(sensor_payload.get("key_findings", []))) or int(input_counts.get("readings", 0))
+    photo_count = int(input_counts.get("photos", 0))
+
+    electrochem_label, electrochem_text = _electrochemical_band(rp_ohm)
+    ai_mode = str(ai_runtime.get("mode", "unknown"))
+
+    overview = (
+        f"Mean polarization resistance was {_fmt_ohm(rp_ohm)} with mean response current {_fmt_current_ma(current_ma)}. "
+        f"The fused severity score was {fused_severity:.2f}/10 with estimated remaining useful life of {rul_days:.1f} days."
+    )
+
+    electrochem_points = [
+        f"Status band reported by the measurement engine: {status_band}.",
+        electrochem_text,
+        f"For this project, an Rp of {_fmt_ohm(rp_ohm)} is much closer to the passive/healthy end than to the active-corrosion end.",
+    ]
+    if current_ma != 0.0:
+        electrochem_points.append(
+            f"The measured current amplitude was {_fmt_current_ma(current_ma)}, which is small and consistent with low electrochemical activity."
+        )
+
+    surface_points = [
+        f"Vision pipeline classified rust coverage as {rust_band} and morphology as {morphology}.",
+        "If the sample is freshly cleaned steel, this low-rust interpretation is directionally consistent with the electrochemical reading."
+        if rust_band in {"none", "low", "unknown"} else
+        "Surface evidence suggests visible corrosion features that should be compared carefully against the electrochemical trend.",
+    ]
+    if conflict:
+        surface_points.append("Sensor and vision results disagree enough to trigger a conflict condition, so the corrosion state should be interpreted cautiously.")
+    else:
+        surface_points.append("No major sensor-versus-vision conflict was detected in the fusion stage.")
+
+    quality_points = [
+        f"Analysis used {reading_count} reading(s) and {photo_count} photo(s).",
+        f"Sensor confidence was {sensor_conf * 100:.0f}%, vision confidence was {vision_conf * 100:.0f}%, and fused confidence was {fused_conf * 100:.0f}%.",
+        f"AI runtime mode was {ai_mode.replace('_', ' ')}.",
+    ]
+    if sensor_quality:
+        quality_points.append("Sensor quality flags: " + ", ".join(sensor_quality) + ".")
+    if vision_quality:
+        quality_points.append("Vision quality flags: " + ", ".join(vision_quality) + ".")
+    if sensor_uncertainty and sensor_uncertainty != ["none"]:
+        quality_points.append("Electrochemical uncertainty drivers: " + ", ".join(sensor_uncertainty) + ".")
+    if ai_mode != "gemini_specialists":
+        quality_points.append(
+            "This report is being generated from the local heuristic pathway rather than the Gemini specialist pathway, so the interpretation is more deterministic than expert-like."
+        )
+
+    recommendation_points = []
+    if electrochem_label in {"strongly_passive_surface", "passive_to_mild_activity"}:
+        recommendation_points.extend([
+            "Treat this run as a healthy baseline candidate and save the averaged last 5 stable readings.",
+            "Repeat the run after re-immersion or after adding a controlled corrosive stimulus so you can demonstrate a downward Rp trend.",
+        ])
+    else:
+        recommendation_points.extend([
+            "Repeat the test after confirming electrode roles, solution salinity, and immersion geometry.",
+            "Capture a second run after the cell has settled for at least 3 full cycles before drawing conclusions.",
+        ])
+    if status_band == "unknown" or rp_ohm <= 0:
+        recommendation_points.append("Do not use this run as a report-quality result until the electrochemical response is physically plausible and repeatable.")
+    if photo_count == 0:
+        recommendation_points.append("Capture at least one sharp surface image so the report can cross-check electrochemistry against visible corrosion evidence.")
+
+    conclusion = (
+        f"Overall interpretation: the sample currently appears {('largely passive with low corrosion activity' if fused_severity < 3.0 else 'electrochemically active enough to warrant caution')}. "
+        f"The present result should be reported as {'a baseline-quality healthy reading' if fused_severity < 3.0 else 'an active-corrosion reading requiring repeat confirmation'}."
+    )
+
+    return {
+        "headline": "Electrochemical Corrosion Assessment",
+        "overview": overview,
+        "conclusion": conclusion,
+        "sections": [
+            {"title": "Electrochemical Interpretation", "items": electrochem_points},
+            {"title": "Surface Correlation", "items": surface_points},
+            {"title": "Data Quality and Confidence", "items": quality_points},
+            {"title": "Recommended Next Actions", "items": recommendation_points},
+        ],
+    }
+
+
 def _no_vision_payload(cycle_id: str) -> dict:
     from datetime import datetime, timezone
     return {
@@ -1057,17 +1223,26 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         t_end = time.time()
+        input_counts = {"photos": len(photos), "readings": len(readings)}
+        report = _build_analysis_report(
+            sensor_payload=sensor_payload,
+            vision_payload=vision_payload,
+            fused_payload=fused,
+            input_counts=input_counts,
+            ai_runtime=ai_runtime,
+        )
 
         self._send_json(200, {
             "ok": True,
             "session_id": session_state.session_id,
             "cycle_id": cycle_id,
-            "input_counts": {"photos": len(photos), "readings": len(readings)},
+            "input_counts": input_counts,
             "ai_specialists_used": svc is not None,
             "ai_runtime": ai_runtime,
             "sensor": sensor_payload,
             "vision": vision_payload,
             "fused": fused,
+            "report": report,
             "timing": {
                 "total_ms": round((t_end - t0) * 1000, 1),
                 "sensor_ms": round(timing_sensor_ms, 1),

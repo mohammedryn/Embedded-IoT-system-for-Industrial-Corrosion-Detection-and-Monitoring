@@ -1007,6 +1007,71 @@ h1 strong {
     margin-bottom: 0.75rem;
 }
 
+.result-report {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.result-report-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: var(--text-main);
+}
+
+.result-report-overview,
+.result-report-conclusion {
+    color: var(--text-main);
+    font-size: 0.94rem;
+    line-height: 1.7;
+}
+
+.result-report-overview {
+    margin-bottom: 1rem;
+}
+
+.result-report-conclusion {
+    margin-top: 1rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    font-weight: 500;
+}
+
+.result-report-sections {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 0.9rem 1.2rem;
+}
+
+.result-report-section {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+}
+
+.result-report-section-title {
+    font-size: 0.86rem;
+    font-weight: 700;
+    color: var(--brand-blue);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.55rem;
+}
+
+.result-report-list {
+    margin: 0;
+    padding-left: 1rem;
+    color: var(--text-muted);
+    line-height: 1.65;
+    font-size: 0.9rem;
+}
+
+.result-report-list li + li {
+    margin-top: 0.35rem;
+}
+
 .result-rationale {
     color: var(--text-muted);
     font-size: 0.88rem;

@@ -268,6 +268,10 @@ class SerialFrameReader:
             try:
                 parsed = parse_frame_line(line)
             except ValueError as exc:
+                if str(exc) == "missing_prefix":
+                    # The firmware emits human-readable debug lines in addition to
+                    # FRAME packets. Those lines are expected and should not spam logs.
+                    continue
                 LOGGER.warning(
                     "serial_parse_error",
                     extra={"line": line, "error": str(exc)},
