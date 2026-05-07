@@ -367,6 +367,8 @@ class SpecialistService:
                 last_error = f"timeout:{exc}"
             except (json.JSONDecodeError, ValidationError, ValueError) as exc:
                 last_error = f"invalid_json_or_schema:{exc}"
+            except Exception as exc:  # pylint: disable=broad-except
+                last_error = f"model_call_exception:{type(exc).__name__}:{exc}"
 
             if attempt < attempts:
                 self.sleep_fn(self.settings.backoff_seconds)

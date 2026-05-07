@@ -537,7 +537,7 @@ const LabSession = (() => {
         try {
             const minReadings = parseInt(document.getElementById('readings-target').value, 10);
             const controller = new AbortController();
-            const timeoutMs = 45000;
+            const timeoutMs = 90000;
             timeoutId = setTimeout(() => controller.abort(), timeoutMs);
             const res = await fetch('/api/session/analyze', {
                 method: 'POST',
@@ -560,7 +560,7 @@ const LabSession = (() => {
             renderResult(data);
         } catch (e) {
             if (e && e.name === 'AbortError') {
-                showError(errEl, 'Analysis timed out after 45s. Check GOOGLE_API_KEY and server logs, then retry.');
+                showError(errEl, 'Analysis timed out after 90s. The app will fall back when Gemini is slow, but this run still exceeded the browser wait window.');
             } else {
                 showError(errEl, 'Network error: ' + e.message);
             }

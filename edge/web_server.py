@@ -928,7 +928,10 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            return
 
     def _send_jpeg(self, image_bytes: bytes):
         self.send_response(200)
@@ -1350,6 +1353,7 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         svc = _get_specialist_service()
         ai_runtime = _analysis_runtime_meta(svc)
         specialist_timeout_seconds = 30.0
+        final_report_timeout_seconds = 15.0
 
         if svc is not None:
             # AI specialist path: sensor and vision both route through Gemini concurrently.
@@ -1448,7 +1452,6 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(500, {"ok": False, "error": "fusion_failed", "detail": str(exc)})
             return
 
-        t_end = time.time()
         input_counts = {"photos": len(photos), "readings": len(readings)}
         report = _build_analysis_report(
             sensor_payload=sensor_payload,
@@ -1459,16 +1462,22 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         )
         if svc is not None:
             try:
-                ai_report = svc.run_final_interpretation(
-                    cycle_id=cycle_id,
-                    orchestrator_input={
-                        "sensor": sensor_payload,
-                        "vision": vision_payload,
-                        "fused": fused,
-                        "input_counts": input_counts,
-                        "ai_runtime": ai_runtime,
-                    },
-                )
+                def _final_report_fn() -> dict:
+                    return svc.run_final_interpretation(
+                        cycle_id=cycle_id,
+                        orchestrator_input={
+                            "sensor": sensor_payload,
+                            "vision": vision_payload,
+                            "fused": fused,
+                            "input_counts": input_counts,
+                            "ai_runtime": ai_runtime,
+                        },
+                    )
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    ff = pool.submit(_final_report_fn)
+                    ai_report = ff.result(timeout=final_report_timeout_seconds)
+
                 report = {
                     "headline": ai_report.get("headline", report.get("headline", "")),
                     "overview": ai_report.get("executive_summary", report.get("overview", "")),
@@ -1489,6 +1498,8 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
                 }
             except Exception:
                 pass
+
+        t_end = time.time()
 
         self._send_json(200, {
             "ok": True,
