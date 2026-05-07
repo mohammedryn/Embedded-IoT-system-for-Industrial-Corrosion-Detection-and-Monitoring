@@ -1,0 +1,129 @@
+project_domain:
+  focus: "Linear polarization resistance interpretation for steel and stainless steel in chloride media with visual cross-checking."
+  intended_use: "Educational/laboratory corrosion monitoring with 3-electrode potentiostat plus image-based surface review."
+  default_electrolyte: "3.5 wt% NaCl or nearby neutral chloride medium"
+  instrument_context:
+    perturbation_window: "approximately +/-10 mV around corrosion potential"
+    frequency_context: "very low-frequency / quasi-steady LPR-style measurement"
+    reporting_rule: "When Tafel slopes and exposed area are not rigorously known, Rp should be treated primarily as a comparative corrosion-resistance indicator rather than a precise corrosion-rate converter."
+  grade_uncertainty_rule: "If the steel grade is unknown, avoid overclaiming specific alloy behavior; state that chloride-induced passivity breakdown risk depends strongly on grade, surface state, inclusions, roughness, temperature, and prior sensitization."
+
+interpretation_rules:
+  - id: "lpr_compare_not_absolute"
+    rule: "Higher Rp generally indicates lower corrosion activity and lower Rp generally indicates higher corrosion activity, but absolute corrosion rate conversion requires a justified Stern-Geary constant and exposed area."
+  - id: "localized_corrosion_caution"
+    rule: "LPR is more reliable for passive-versus-active trend monitoring and uniform corrosion comparison than for quantifying localized pitting severity by itself."
+  - id: "chloride_passivity_caution"
+    rule: "In chloride media, stainless steel can appear largely passive overall while still being susceptible to metastable or incipient localized pitting; therefore visual evidence and trend stability matter."
+  - id: "small_overpotential_rule"
+    rule: "Interpretation should assume the polarization window must remain close to Ecorr and current response should be approximately linear; excessive asymmetry, strong curvature, or unstable current should lower confidence."
+  - id: "surface_state_rule"
+    rule: "Fresh cleaning, roughness, sensitization, welded heat tint, and inclusion state can materially shift apparent corrosion resistance and pitting susceptibility."
+  - id: "reference_scale_rule"
+    rule: "If calomel/SCE is used instead of Ag/AgCl, potential scales differ, but qualitative Rp interpretation can still be compared if the cell and procedure are otherwise consistent."
+
+source_memory:
+  - id: "metrohm_an_cor_003_2025"
+    title: "Measurement of polarization resistance"
+    source_type: "application_note"
+    url: "https://www.metrohm.com/en/applications/application-notes/autolab-applikationen-anautolab/an-cor-003.html"
+    key_points:
+      - "Rp is the inverse slope of the polarization curve at or near Ecorr."
+      - "If Tafel slopes are not known, Rp is still useful as a quantitative comparative corrosion-resistance parameter."
+      - "The polarization range used for analysis should stay in the linear region, typically around 10 mV or less."
+      - "Ohmic drop and capacitive current can distort the result and should reduce confidence."
+    operational_use:
+      - "Use this source to justify comparative Rp interpretation and caution against over-converting to corrosion rate."
+
+  - id: "gamry_lpr_tutorial"
+    title: "Polarization Resistance Tutorial"
+    source_type: "instrument_tutorial"
+    url: "https://www.gamry.com/application-notes/corrosion-coatings/corrosion-techniques-polarization-resistance/"
+    key_points:
+      - "LPR is commonly performed in a 3-electrode configuration."
+      - "Common counter electrodes include graphite and platinum; common reference electrodes include SCE and Ag/AgCl."
+      - "Typical perturbation is on the order of +/-10 mV around OCP."
+    operational_use:
+      - "Use this source to validate platinum as a practical counter electrode and calomel/SCE as a practical reference electrode."
+
+  - id: "gonzalez_b_catalog_1996"
+    title: "Polarization resistance constant B values for 20 different metal-environment systems"
+    source_type: "journal_article"
+    url: "https://revistademetalurgia.revistas.csic.es/index.php/revistademetalurgia/article/view/926"
+    key_points:
+      - "The Stern-Geary constant B depends on the metal-environment system and should not be assumed blindly."
+      - "Using a generic B can materially change any corrosion-rate estimate derived from Rp."
+    operational_use:
+      - "Use this source to avoid pretending that Rp directly equals corrosion rate unless B is justified."
+
+  - id: "orientjchem_neutral_chloride_2019"
+    title: "Data on the Corrosion Resistance and Polarization Behaviour of Lean Austenitic and Ferritic Stainless Steels in Neutral Chloride Media"
+    source_type: "journal_article"
+    url: "https://www.orientjchem.org/vol35no3/data-on-the-corrosion-resistance-and-polarization-behaviour-of-lean-austenitic-and-ferritic-stainless-steels-in-neutral-chloride-media/"
+    key_points:
+      - "Neutral chloride concentration materially changes the passivation and localized-corrosion behavior of stainless steels."
+      - "Different stainless grades can remain passive or activate differently even in similar chloride media."
+      - "Localized corrosion resistance must be discussed separately from simple uniform-corrosion ranking."
+    operational_use:
+      - "Use this source when discussing chloride dependence, passivity, and grade sensitivity."
+
+  - id: "ma_2022_sensitized_304_acid_chloride"
+    title: "Corrosion Behavior of Sensitized AISI 304 Stainless Steel in Acid Chloride Solution"
+    source_type: "journal_article"
+    url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC9740934/"
+    key_points:
+      - "AISI 304 owes corrosion resistance to a passive film, but chloride can trigger localized breakdown."
+      - "Sensitization and elevated temperature worsen corrosion susceptibility."
+      - "Surface state after heat treatment or oxide removal changes corrosion performance."
+    operational_use:
+      - "Use this source when warning that stainless steel can deteriorate sharply after sensitization, heating, or passive-film damage."
+
+  - id: "corsci_metastable_pitting_304_2014"
+    title: "Metastable pitting corrosion of 304 stainless steel in 3.5% NaCl solution"
+    source_type: "journal_article"
+    url: "https://www.sciencedirect.com/science/article/pii/S0010938X14002042"
+    key_points:
+      - "304 stainless steel in 3.5 wt% NaCl can experience metastable pits before stable pitting becomes obvious."
+      - "Current transients and pit repassivation matter; visual damage may lag electrochemical activity."
+      - "Localized corrosion can begin even when the macroscopic surface still looks relatively intact."
+    operational_use:
+      - "Use this source to avoid saying that a visually clean surface guarantees absence of localized chloride attack."
+
+  - id: "cemconcomp_lpr_limitations_2006"
+    title: "Limitations of the linear polarization method to determine stainless steel corrosion rate in concrete environment"
+    source_type: "journal_article"
+    url: "https://www.sciencedirect.com/science/article/pii/S0958946506000151"
+    key_points:
+      - "Rp can help distinguish active versus passive behavior, but sometimes Rp alone is insufficient."
+      - "Curve shape and measurement context can matter as much as the Rp magnitude."
+      - "LPR has notable limitations when corrosion is non-uniform or localized."
+    operational_use:
+      - "Use this source to keep confidence conservative when interpreting localized corrosion from Rp alone."
+
+  - id: "corcom_304cu_2026"
+    title: "Effects of copper on localized corrosion behavior of stainless steel 304 in 3.5 wt.% NaCl solution"
+    source_type: "journal_article"
+    url: "https://www.sciencedirect.com/science/article/pii/S2667266926000022"
+    key_points:
+      - "For 304-class stainless steels in 3.5 wt% NaCl, pitting-related electrochemical parameters can shift substantially with composition and passive-film behavior."
+      - "Passive behavior and localized pitting susceptibility must be discussed together, not as a single scalar."
+    operational_use:
+      - "Use this source to reinforce that alloy chemistry and passive-film stability influence chloride performance."
+
+vision_rules:
+  - id: "vision_none_not_absolute"
+    rule: "If the image shows no obvious rust or pitting, describe the surface as visually consistent with a healthy/passive state but do not claim zero corrosion."
+  - id: "vision_pitting_rule"
+    rule: "Small dark pits, orange-brown point spots, edge staining, undercutting near inclusions, or clustered spot defects should raise concern for localized attack or pitting proxies."
+  - id: "vision_morphology_rule"
+    rule: "Differentiate broad uniform discoloration from isolated pits, crevice-like edge attack, staining from runoff, and roughened matte attack."
+  - id: "vision_quality_rule"
+    rule: "If glare, blur, low contrast, or poor angle prevents confident pit recognition, lower confidence and state the limitation explicitly."
+
+orchestration_rules:
+  - id: "fusion_priority_rule"
+    rule: "Combine electrochemistry and vision without forcing agreement. If electrochemistry suggests strong passivity but vision suggests localized defects, explicitly discuss early/localized attack as a possibility."
+  - id: "grade_and_setup_rule"
+    rule: "Always mention when the interpretation is setup-relative and dependent on sample preparation, exposed area, chloride concentration, and unknown grade."
+  - id: "operator_value_rule"
+    rule: "The final report should read like a corrosion lab note: state the condition, what supports it, what could be misleading, and what to do next."

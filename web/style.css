@@ -1038,6 +1038,45 @@ h1 strong {
     font-weight: 500;
 }
 
+.result-report-sources {
+    margin-top: 1rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.result-report-sources-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    margin-bottom: 0.6rem;
+}
+
+.result-report-source-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.result-report-source-item {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.45rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    background: rgba(59, 130, 246, 0.08);
+    color: #cfe0ff;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    text-decoration: none;
+}
+
+.result-report-source-item:hover {
+    border-color: rgba(59, 130, 246, 0.55);
+    background: rgba(59, 130, 246, 0.14);
+}
+
 .result-report-sections {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

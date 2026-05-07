@@ -17,6 +17,12 @@ class GeminiAnalysis(BaseModel):
     surface_condition: str = Field(description="e.g., uniform, pitted, localized")
     severity_0_to_10: float = Field(ge=0, le=10)
     confidence_0_to_1: float = Field(ge=0, le=1)
+    pitting_observed: bool = False
+    pitting_evidence: str = "not_observed"
+    suspected_damage_modes: list[str] = Field(default_factory=list)
+    suspicious_regions: list[str] = Field(default_factory=list)
+    corrosion_spot_count_estimate: str = "unknown"
+    surface_limitations: list[str] = Field(default_factory=list)
     key_findings: list[str]
     recommendations: list[str]
     model_id: str
@@ -65,7 +71,40 @@ class GeminiVisionClient:
             models.append(self.fallback_model_id)
         return models
 
-    def analyze_image_file(self, image_path: str | Path) -> dict[str, Any]:
+    def _build_prompt(self, context: dict[str, Any] | None = None) -> str:
+        context_json = json.dumps(context or {}, indent=2, sort_keys=True)
+        return f"""You are a corrosion-vision specialist reviewing a steel or stainless-steel surface image.
+Return STRICT JSON only (no markdown, no prose, no code fences).
+
+Use cautious electrochemical/corrosion language:
+- Do not claim exact pit depth, exact alloy grade, or exact corrosion rate from vision alone.
+- If the image quality is limited, say so in surface_limitations.
+- Differentiate uniform discoloration, runoff staining, isolated spot defects, crevice-like edge attack, and pitting suspicion.
+- If the provided context says the sample is in chloride-service/LPR testing, consider that localized attack can exist even when broad rust coverage is low.
+
+Return exactly this schema:
+{{
+  "text_summary": "2-4 sentence technical description of what the surface visually suggests",
+  "rust_coverage_estimate": "none|light|moderate|heavy",
+  "surface_condition": "uniform|pitted|localized|mixed|other",
+  "severity_0_to_10": 3.5,
+  "confidence_0_to_1": 0.85,
+  "pitting_observed": false,
+  "pitting_evidence": "brief explanation",
+  "suspected_damage_modes": ["mode1", "mode2"],
+  "suspicious_regions": ["region1", "region2"],
+  "corrosion_spot_count_estimate": "none|few|several|many|unknown",
+  "surface_limitations": ["limitation1"],
+  "key_findings": ["finding1", "finding2", "finding3"],
+  "recommendations": ["recommendation1", "recommendation2"],
+  "model_id": "the model id that produced this answer"
+}}
+
+Context JSON:
+{context_json}
+"""
+
+    def analyze_image_file(self, image_path: str | Path, context: dict[str, Any] | None = None) -> dict[str, Any]:
         """Analyze a single image file and return structured analysis."""
         import google.generativeai as genai
 
@@ -88,21 +127,7 @@ class GeminiVisionClient:
         }
         mime_type = mime_types.get(suffix, "image/jpeg")
 
-        # Build the analysis prompt
-        prompt = """Analyze this image for corrosion/rust conditions. Return STRICT JSON only (no markdown, no prose):
-
-{
-  "text_summary": "Brief description of surface condition",
-  "rust_coverage_estimate": "light|moderate|heavy",
-  "surface_condition": "uniform|pitted|localized|other",
-  "severity_0_to_10": 3.5,
-  "confidence_0_to_1": 0.85,
-  "key_findings": ["finding1", "finding2"],
-  "recommendations": ["recommendation1", "recommendation2"],
-  "model_id": "the model id that produced this answer"
-}
-
-Be specific and quantifiable."""
+        prompt = self._build_prompt(context)
 
         # Call Gemini API with primary model and fallback model.
         response_text = ""
@@ -142,24 +167,17 @@ Be specific and quantifiable."""
                 "details": str(e)
             }
 
-    def analyze_image_bytes(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> dict[str, Any]:
+    def analyze_image_bytes(
+        self,
+        image_bytes: bytes,
+        mime_type: str = "image/jpeg",
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Analyze image from bytes and return structured analysis."""
         import google.generativeai as genai
 
         image_data = base64.standard_b64encode(image_bytes).decode("utf-8")
-
-        prompt = """Analyze this image for corrosion/rust conditions. Return STRICT JSON only:
-
-{
-  "text_summary": "Brief description",
-  "rust_coverage_estimate": "light|moderate|heavy",
-  "surface_condition": "uniform|pitted|localized|other",
-  "severity_0_to_10": 3.5,
-  "confidence_0_to_1": 0.85,
-  "key_findings": ["finding1"],
-  "recommendations": ["rec1"],
-  "model_id": "the model id that produced this answer"
-}"""
+        prompt = self._build_prompt(context)
 
         response_text = ""
         last_error = ""

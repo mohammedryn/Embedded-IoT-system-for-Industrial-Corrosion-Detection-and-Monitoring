@@ -42,6 +42,9 @@ _fusion_service = None
 _specialist_init_attempted = False
 _specialist_service = None
 _specialist_init_error = ""
+_vision_ai_client = None
+_vision_ai_init_attempted = False
+_vision_ai_init_error = ""
 
 
 class _CameraPreviewWorker:
@@ -240,6 +243,25 @@ def _get_specialist_service():
     return _specialist_service
 
 
+def _get_gemini_vision_client():
+    """Return GeminiVisionClient when GOOGLE_API_KEY is present, else None."""
+    global _vision_ai_client, _vision_ai_init_attempted, _vision_ai_init_error
+    if not _vision_ai_init_attempted:
+        with _svc_lock:
+            if not _vision_ai_init_attempted:
+                _vision_ai_init_attempted = True
+                if os.environ.get("GOOGLE_API_KEY"):
+                    try:
+                        from vision.gemini_client import GeminiVisionClient
+                        _vision_ai_client = GeminiVisionClient()
+                        _vision_ai_init_error = ""
+                    except Exception as exc:
+                        _vision_ai_init_error = f"vision_init_failed:{type(exc).__name__}"
+                else:
+                    _vision_ai_init_error = "api_key_missing"
+    return _vision_ai_client
+
+
 def _analysis_runtime_meta(svc) -> dict:
     api_key_present = bool(os.environ.get("GOOGLE_API_KEY"))
     if svc is not None:
@@ -288,6 +310,153 @@ def _best_vision_result(photos: list, cycle_id: str) -> dict | None:
         except Exception:
             pass
     return best_result
+
+
+def _best_vision_observation(photos: list, cycle_id: str) -> tuple[dict | None, dict | None]:
+    """Return (best_result, source_photo) for the most useful photo in the session."""
+    best_result = None
+    best_photo = None
+    best_conf = -1.0
+    vp = _get_vision_pipeline()
+    for photo in photos:
+        try:
+            result = vp.analyze_image(photo["path"], cycle_id)
+            quality_flags = result.get("quality_flags") or []
+            confidence = float(result.get("confidence_0_to_1", 0.0) or 0.0)
+            if not quality_flags and confidence > best_conf:
+                best_result = result
+                best_photo = photo
+                best_conf = confidence
+        except Exception:
+            pass
+    if best_result is None and photos:
+        try:
+            best_photo = photos[-1]
+            best_result = vp.analyze_image(best_photo["path"], cycle_id)
+        except Exception:
+            pass
+    return best_result, best_photo
+
+
+def _load_source_catalog() -> dict[str, dict]:
+    try:
+        from fusion.specialists import load_corrosion_memory
+        memory = load_corrosion_memory(PROJECT_ROOT)
+        return {
+            str(item.get("id")): {
+                "id": str(item.get("id")),
+                "title": str(item.get("title", "")),
+                "url": str(item.get("url", "")),
+                "source_type": str(item.get("source_type", "")),
+            }
+            for item in memory.source_memory
+            if item.get("id")
+        }
+    except Exception:
+        return {}
+
+
+def _expand_sources(source_ids: list[str]) -> list[dict]:
+    catalog = _load_source_catalog()
+    expanded: list[dict] = []
+    seen: set[str] = set()
+    for source_id in source_ids:
+        if source_id in seen:
+            continue
+        seen.add(source_id)
+        meta = catalog.get(source_id)
+        if meta:
+            expanded.append(meta)
+        else:
+            expanded.append({"id": source_id, "title": source_id, "url": "", "source_type": ""})
+    return expanded
+
+
+def _map_gemini_image_result_to_vision_payload(
+    gemini_result: dict,
+    local_result: dict,
+    cycle_id: str,
+) -> dict:
+    from datetime import datetime, timezone
+    timestamp = datetime.now(timezone.utc).isoformat()
+    morphology = str(gemini_result.get("surface_condition", local_result.get("morphology_class", "unknown")))
+    pit_suspected = bool(gemini_result.get("pitting_observed", False)) or (
+        "pitted" in morphology.lower()
+    )
+    key_findings = list(local_result.get("key_findings", [])) + list(gemini_result.get("key_findings", []))
+    quality_flags = list(local_result.get("quality_flags", []))
+    uncertainty_drivers = list(local_result.get("uncertainty_drivers", []))
+    uncertainty_drivers.extend(gemini_result.get("surface_limitations", []))
+    surface_summary = gemini_result.get(
+        "text_summary",
+        "Gemini visual review was unavailable; local vision metrics were used instead.",
+    )
+    suspected_damage_modes = gemini_result.get("suspected_damage_modes", [])
+    suspicious_regions = gemini_result.get("suspicious_regions", [])
+    if suspicious_regions:
+        suspected_damage_modes = list(suspected_damage_modes) + [f"regions:{', '.join(suspicious_regions)}"]
+    return {
+        "timestamp": timestamp,
+        "cycle_id": cycle_id,
+        "visual_severity_0_to_10": float(gemini_result.get("severity_0_to_10", local_result.get("visual_severity_0_to_10", 5.0))),
+        "confidence_0_to_1": float(gemini_result.get("confidence_0_to_1", local_result.get("confidence_0_to_1", 0.3))),
+        "rust_coverage_band": str(gemini_result.get("rust_coverage_estimate", local_result.get("rust_coverage_band", "unknown"))),
+        "morphology_class": morphology,
+        "surface_summary": surface_summary,
+        "pit_suspected": pit_suspected,
+        "pit_evidence": str(gemini_result.get("pitting_evidence", "not_reported")),
+        "suspected_damage_modes": suspected_damage_modes or ["unknown"],
+        "key_findings": key_findings or ["no_valid_visual_signal"],
+        "recommended_actions": list(gemini_result.get("recommendations", [])) or [
+            "Capture sharper, evenly lit close-up images before trusting fine pitting interpretation.",
+        ],
+        "source_ids": [
+            "orientjchem_neutral_chloride_2019",
+            "corsci_metastable_pitting_304_2014",
+            "ma_2022_sensitized_304_acid_chloride",
+        ],
+        "uncertainty_drivers": uncertainty_drivers or ["image_ai_limited"],
+        "quality_flags": quality_flags,
+        "degraded_mode": bool(local_result.get("degraded_mode", False)),
+        "stale": False,
+        "fallback_reason": local_result.get("fallback_reason", ""),
+        "model_id": str(gemini_result.get("model_id", "gemini-vision")),
+        "schema_version": "c05-vision-v1",
+        "gemini_raw": gemini_result,
+    }
+
+
+def _ai_vision_payload_from_photos(photos: list, cycle_id: str) -> dict:
+    raw, source_photo = _best_vision_observation(photos, cycle_id)
+    if raw is None:
+        return _no_vision_payload(cycle_id)
+
+    client = _get_gemini_vision_client()
+    if client is None or source_photo is None:
+        payload = _build_vision_payload(raw, cycle_id)
+        payload["fallback_reason"] = _vision_ai_init_error or payload.get("fallback_reason", "")
+        return payload
+
+    try:
+        gemini_result = client.analyze_image_file(
+            source_photo["path"],
+            context={
+                "cycle_id": cycle_id,
+                "project_mode": "corrosion_lab_surface_assessment",
+                "local_vision_summary": raw,
+                "photo_count": len(photos),
+                "research_hint": "Interpret chloride-exposed steel or stainless steel cautiously with respect to localized attack.",
+            },
+        )
+        if "error" in gemini_result:
+            payload = _build_vision_payload(raw, cycle_id)
+            payload["fallback_reason"] = f"gemini_vision_error:{gemini_result.get('error', 'unknown')}"
+            return payload
+        return _map_gemini_image_result_to_vision_payload(gemini_result, raw, cycle_id)
+    except Exception as exc:
+        payload = _build_vision_payload(raw, cycle_id)
+        payload["fallback_reason"] = f"gemini_vision_exception:{type(exc).__name__}"
+        return payload
 
 
 def _rp_to_severity(rp_ohm: float) -> float:
@@ -352,10 +521,31 @@ def _build_sensor_payload(readings: list, cycle_id: str) -> dict:
         "status_band": last_status,
         "electrochemical_severity_0_to_10": round(severity, 2),
         "confidence_0_to_1": round(confidence, 3),
+        "expert_summary": (
+            f"Mean Rp was {round(mean_rp, 1)} ohm over {count} readings; this is being treated as a comparative corrosion-resistance indicator."
+        ),
+        "mechanistic_interpretation": (
+            "Heuristic mode treats higher Rp as lower overall corrosion activity, but does not convert Rp into an absolute corrosion rate because Stern-Geary calibration and exposed-area rigor are not available here."
+        ),
+        "corrosion_mode": (
+            "passive_or_low_activity" if mean_rp >= 50000 else
+            "mild_activity" if mean_rp >= 10000 else
+            "active_corrosion" if mean_rp >= 1000 else
+            "severe_active_corrosion"
+        ),
         "key_findings": [
             f"mean_rp={round(mean_rp, 1)}_ohm",
             f"n={count}_readings",
             f"status={last_status}",
+        ],
+        "recommended_actions": [
+            "Use the averaged late-cycle readings as a relative baseline, not as an absolute corrosion-rate certificate.",
+            "Compare against repeat runs and controlled chloride/agitation changes to confirm trend direction.",
+        ],
+        "source_ids": [
+            "metrohm_an_cor_003_2025",
+            "gonzalez_b_catalog_1996",
+            "cemconcomp_lpr_limitations_2006",
         ],
         "uncertainty_drivers": uncertainty_drivers or ["none"],
         "quality_flags": quality_flags,
@@ -374,7 +564,22 @@ def _build_vision_payload(vision_result: dict, cycle_id: str) -> dict:
         "confidence_0_to_1": vision_result.get("confidence_0_to_1", 0.3),
         "rust_coverage_band": vision_result.get("rust_coverage_band", "unknown"),
         "morphology_class": vision_result.get("morphology_class", "unknown"),
+        "surface_summary": vision_result.get(
+            "surface_summary",
+            "Local HSV-based vision review was used to estimate visible rust and surface morphology."
+        ),
+        "pit_suspected": bool(vision_result.get("pit_suspected", False)),
+        "pit_evidence": vision_result.get("pit_evidence", "not_assessed"),
+        "suspected_damage_modes": vision_result.get("suspected_damage_modes", ["unknown"]),
         "key_findings": vision_result.get("key_findings", ["local_hsv_analysis"]),
+        "recommended_actions": vision_result.get(
+            "recommended_actions",
+            ["Capture multiple sharp images with oblique lighting if pit confirmation is important."]
+        ),
+        "source_ids": vision_result.get(
+            "source_ids",
+            ["orientjchem_neutral_chloride_2019", "corsci_metastable_pitting_304_2014"]
+        ),
         "uncertainty_drivers": vision_result.get("uncertainty_drivers", ["local_only"]),
         "quality_flags": vision_result.get("quality_flags", []),
         "degraded_mode": vision_result.get("degraded_mode", False),
@@ -538,6 +743,10 @@ def _build_analysis_report(
         f"The present result should be reported as {'a baseline-quality healthy reading' if fused_severity < 3.0 else 'an active-corrosion reading requiring repeat confirmation'}."
     )
 
+    source_ids = list(dict.fromkeys(
+        list(sensor_payload.get("source_ids", [])) + list(vision_payload.get("source_ids", []))
+    ))
+
     return {
         "headline": "Electrochemical Corrosion Assessment",
         "overview": overview,
@@ -548,6 +757,8 @@ def _build_analysis_report(
             {"title": "Data Quality and Confidence", "items": quality_points},
             {"title": "Recommended Next Actions", "items": recommendation_points},
         ],
+        "source_ids": source_ids,
+        "sources": _expand_sources(source_ids),
     }
 
 
@@ -558,7 +769,13 @@ def _no_vision_payload(cycle_id: str) -> dict:
         "cycle_id": cycle_id,
         "visual_severity_0_to_10": 5.0, "confidence_0_to_1": 0.1,
         "rust_coverage_band": "unknown", "morphology_class": "unknown",
+        "surface_summary": "No photos were available for visual corrosion assessment.",
+        "pit_suspected": False,
+        "pit_evidence": "no_photos",
+        "suspected_damage_modes": ["unknown"],
         "key_findings": ["no_photos_captured"],
+        "recommended_actions": ["Capture at least one clear surface image before requesting final corrosion interpretation."],
+        "source_ids": ["orientjchem_neutral_chloride_2019", "corsci_metastable_pitting_304_2014"],
         "uncertainty_drivers": ["no_images"],
         "quality_flags": ["no_photos"],
         "degraded_mode": True, "stale": False,
@@ -1154,16 +1371,25 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
 
             def _vision_fn() -> dict:
                 try:
-                    raw = _best_vision_result(photos, cycle_id)
-                    if raw is None:
-                        return _no_vision_payload(cycle_id)
+                    ai_vision_input = _ai_vision_payload_from_photos(photos, cycle_id)
+                    if ai_vision_input.get("fallback_reason") == "no_photos":
+                        return ai_vision_input
                     return svc.run_vision(
                         cycle_id=cycle_id,
                         vision_input={
-                            "visual_severity_0_to_10": raw.get("visual_severity_0_to_10", 5.0),
-                            "confidence_0_to_1": raw.get("confidence_0_to_1", 0.3),
-                            "rust_coverage_band": raw.get("rust_coverage_band", "unknown"),
-                            "morphology_class": raw.get("morphology_class", "unknown"),
+                            "visual_severity_0_to_10": ai_vision_input.get("visual_severity_0_to_10", 5.0),
+                            "confidence_0_to_1": ai_vision_input.get("confidence_0_to_1", 0.3),
+                            "rust_coverage_band": ai_vision_input.get("rust_coverage_band", "unknown"),
+                            "morphology_class": ai_vision_input.get("morphology_class", "unknown"),
+                            "surface_summary": ai_vision_input.get("surface_summary", ""),
+                            "pit_suspected": ai_vision_input.get("pit_suspected", False),
+                            "pit_evidence": ai_vision_input.get("pit_evidence", "not_assessed"),
+                            "suspected_damage_modes": ai_vision_input.get("suspected_damage_modes", ["unknown"]),
+                            "key_findings": ai_vision_input.get("key_findings", ["no_valid_visual_signal"]),
+                            "recommended_actions": ai_vision_input.get("recommended_actions", []),
+                            "source_ids": ai_vision_input.get("source_ids", []),
+                            "uncertainty_drivers": ai_vision_input.get("uncertainty_drivers", []),
+                            "quality_flags": ai_vision_input.get("quality_flags", []),
                         },
                     )
                 except Exception as exc:
@@ -1231,6 +1457,38 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             input_counts=input_counts,
             ai_runtime=ai_runtime,
         )
+        if svc is not None:
+            try:
+                ai_report = svc.run_final_interpretation(
+                    cycle_id=cycle_id,
+                    orchestrator_input={
+                        "sensor": sensor_payload,
+                        "vision": vision_payload,
+                        "fused": fused,
+                        "input_counts": input_counts,
+                        "ai_runtime": ai_runtime,
+                    },
+                )
+                report = {
+                    "headline": ai_report.get("headline", report.get("headline", "")),
+                    "overview": ai_report.get("executive_summary", report.get("overview", "")),
+                    "conclusion": (
+                        f"Overall condition: {ai_report.get('overall_condition', 'unknown')}. "
+                        f"Integrated confidence: {int(round(float(ai_report.get('confidence_0_to_1', 0.0)) * 100))}%."
+                    ),
+                    "sections": [
+                        {"title": "Electrochemical Interpretation", "items": ai_report.get("electrochemical_assessment", [])},
+                        {"title": "Surface Correlation", "items": ai_report.get("vision_assessment", [])},
+                        {"title": "Integrated Interpretation", "items": ai_report.get("cross_modal_assessment", [])},
+                        {"title": "Limitations", "items": ai_report.get("limitations", [])},
+                        {"title": "Recommended Next Actions", "items": ai_report.get("recommendations", [])},
+                    ],
+                    "source_ids": ai_report.get("source_ids", []),
+                    "sources": _expand_sources(ai_report.get("source_ids", [])),
+                    "ai_detailed_report": ai_report,
+                }
+            except Exception:
+                pass
 
         self._send_json(200, {
             "ok": True,

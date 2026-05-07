@@ -616,6 +616,7 @@ const LabSession = (() => {
         const reportHeadlineEl = document.getElementById('result-report-headline');
         const reportOverviewEl = document.getElementById('result-report-overview');
         const reportSectionsEl = document.getElementById('result-report-sections');
+        const reportSourcesEl = document.getElementById('result-report-sources');
         const reportConclusionEl = document.getElementById('result-report-conclusion');
 
         if (report && (report.overview || report.sections || report.conclusion)) {
@@ -643,12 +644,44 @@ const LabSession = (() => {
                 reportSectionsEl.appendChild(block);
             });
 
+            reportSourcesEl.innerHTML = '';
+            const sources = report.sources || [];
+            if (sources.length) {
+                const title = document.createElement('h5');
+                title.className = 'result-report-sources-title';
+                title.textContent = 'Research Basis';
+                reportSourcesEl.appendChild(title);
+
+                const list = document.createElement('div');
+                list.className = 'result-report-source-list';
+                sources.forEach(source => {
+                    const item = document.createElement(source.url ? 'a' : 'div');
+                    item.className = 'result-report-source-item';
+                    if (source.url) {
+                        item.href = source.url;
+                        item.target = '_blank';
+                        item.rel = 'noreferrer noopener';
+                    }
+                    const label = source.title || source.id || 'Source';
+                    item.textContent = source.source_type
+                        ? label + ' · ' + source.source_type.replace(/_/g, ' ')
+                        : label;
+                    list.appendChild(item);
+                });
+                reportSourcesEl.appendChild(list);
+                reportSourcesEl.classList.remove('hidden');
+            } else {
+                reportSourcesEl.classList.add('hidden');
+            }
+
             reportConclusionEl.textContent = report.conclusion || '';
             reportEl.classList.remove('hidden');
         } else {
             reportHeadlineEl.textContent = '';
             reportOverviewEl.textContent = '';
             reportSectionsEl.innerHTML = '';
+            reportSourcesEl.innerHTML = '';
+            reportSourcesEl.classList.add('hidden');
             reportConclusionEl.textContent = '';
             reportEl.classList.add('hidden');
         }
