@@ -1,17 +1,25 @@
-"""Gemini vision API client for image analysis."""
+"""Vertex-backed vision API client with a compatibility surface for legacy helpers."""
 from __future__ import annotations
 
-import base64
 import json
-import os
+import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from ai.providers.vertex import VertexAIProvider
+from ai.runtime import load_ai_config
+
 
 class GeminiAnalysis(BaseModel):
-    """Structured response from Gemini vision analysis."""
+    """Structured response from cloud vision analysis."""
+
     text_summary: str
     rust_coverage_estimate: str = Field(description="light/moderate/heavy")
     surface_condition: str = Field(description="e.g., uniform, pitted, localized")
@@ -29,47 +37,36 @@ class GeminiAnalysis(BaseModel):
 
 
 class GeminiVisionClient:
-    """Client for Gemini vision analysis."""
+    """Compatibility wrapper that now uses Vertex AI instead of API-key Gemini."""
 
     def __init__(
         self,
         api_key: str | None = None,
         model_id: str | None = None,
         fallback_model_id: str | None = None,
-    ):
-        """Initialize with optional API key. Falls back to GOOGLE_API_KEY env var."""
-        import google.generativeai as genai
-
-        self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
-        if not self.api_key:
+        *,
+        auth_mode: str | None = None,
+        project_id: str | None = None,
+        location: str | None = None,
+    ) -> None:
+        if api_key:
             raise ValueError(
-                "GOOGLE_API_KEY not provided. Must set via:\n"
-                "  export GOOGLE_API_KEY='your-key-here'\n"
-                "or pass api_key parameter"
+                "API key-based Gemini access is deprecated for this project. "
+                "Use Vertex auth via ADC or GOOGLE_APPLICATION_CREDENTIALS."
             )
 
-        self.model_id = model_id or os.getenv("GEMINI_MODEL_ID") or "gemini-3-flash-preview"
-        self.fallback_model_id = fallback_model_id or os.getenv("GEMINI_FALLBACK_MODEL_ID") or "gemini-3.1-pro-preview"
-        
-        genai.configure(api_key=self.api_key)
-
-    @staticmethod
-    def _strip_json_fence(response_text: str) -> str:
-        txt = response_text.strip()
-        if txt.startswith("```"):
-            parts = txt.split("```")
-            if len(parts) >= 2:
-                txt = parts[1]
-            if txt.startswith("json"):
-                txt = txt[4:]
-            txt = txt.strip()
-        return txt
-
-    def _models_to_try(self) -> list[str]:
-        models: list[str] = [self.model_id]
-        if self.fallback_model_id and self.fallback_model_id not in models:
-            models.append(self.fallback_model_id)
-        return models
+        config = load_ai_config(PROJECT_ROOT)
+        self.config = replace(
+            config,
+            primary_model_id=model_id or config.primary_model_id,
+            fallback_model_id=fallback_model_id or config.fallback_model_id,
+            auth_mode=auth_mode or config.auth_mode,
+            project_id=project_id if project_id is not None else config.project_id,
+            location=location or config.location,
+        )
+        self.provider = VertexAIProvider(config=self.config)
+        self.model_id = self.config.primary_model_id
+        self.fallback_model_id = self.config.fallback_model_id
 
     def _build_prompt(self, context: dict[str, Any] | None = None) -> str:
         context_json = json.dumps(context or {}, indent=2, sort_keys=True)
@@ -106,65 +103,39 @@ Context JSON:
 
     def analyze_image_file(self, image_path: str | Path, context: dict[str, Any] | None = None) -> dict[str, Any]:
         """Analyze a single image file and return structured analysis."""
-        import google.generativeai as genai
-
         image_path = Path(image_path)
         if not image_path.exists():
             raise FileNotFoundError(f"Image not found: {image_path}")
 
-        # Load and encode image
-        with open(image_path, "rb") as f:
-            image_data = base64.standard_b64encode(f.read()).decode("utf-8")
+        runtime = self.provider.describe_runtime()
+        if runtime.get("runtime_mode") != "vertex_expert":
+            return {
+                "error": "Vertex AI unavailable for vision analysis",
+                "details": runtime,
+            }
 
-        # Determine MIME type
-        suffix = image_path.suffix.lower()
-        mime_types = {
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".png": "image/png",
-            ".gif": "image/gif",
-            ".webp": "image/webp"
-        }
-        mime_type = mime_types.get(suffix, "image/jpeg")
-
-        prompt = self._build_prompt(context)
-
-        # Call Gemini API with primary model and fallback model.
         response_text = ""
-        last_error = ""
         try:
-            for model_id in self._models_to_try():
-                try:
-                    model = genai.GenerativeModel(model_id)
-
-                    image_part = {"mime_type": mime_type, "data": image_data}
-                    response = model.generate_content([prompt, image_part])
-                    response_text = self._strip_json_fence(response.text)
-                    analysis_dict = json.loads(response_text)
-
-                    # Ensure output model_id reflects the actual model used.
-                    analysis_dict["model_id"] = model_id
-                    validated = GeminiAnalysis.model_validate(analysis_dict)
-                    return validated.model_dump()
-                except Exception as e:
-                    last_error = f"{model_id}: {e}"
-                    continue
-
+            response_text = self.provider.analyze_image_with_context(
+                image_path=image_path,
+                prompt=self._build_prompt(context),
+                model_id=self.model_id,
+                timeout_seconds=self.config.vision_timeout_seconds,
+            )
+            analysis_dict = json.loads(response_text)
+            analysis_dict["model_id"] = str(analysis_dict.get("model_id") or self.model_id)
+            validated = GeminiAnalysis.model_validate(analysis_dict)
+            return validated.model_dump()
+        except json.JSONDecodeError as exc:
             return {
-                "error": "Gemini API call failed for all configured models",
-                "details": last_error or "No model attempts were made",
-            }
-            
-        except json.JSONDecodeError as e:
-            return {
-                "error": "Failed to parse Gemini response as JSON",
+                "error": "Failed to parse Vertex response as JSON",
                 "raw_response": response_text,
-                "details": str(e)
+                "details": str(exc),
             }
-        except Exception as e:
+        except Exception as exc:  # pylint: disable=broad-except
             return {
-                "error": f"Gemini API call failed: {str(e)}",
-                "details": str(e)
+                "error": f"Vertex vision analysis failed: {exc}",
+                "details": str(exc),
             }
 
     def analyze_image_bytes(
@@ -173,43 +144,23 @@ Context JSON:
         mime_type: str = "image/jpeg",
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Analyze image from bytes and return structured analysis."""
-        import google.generativeai as genai
+        """Analyze image bytes by writing a temporary file and reusing the file path flow."""
+        import tempfile
 
-        image_data = base64.standard_b64encode(image_bytes).decode("utf-8")
-        prompt = self._build_prompt(context)
+        suffix = {
+            "image/png": ".png",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+        }.get(mime_type, ".jpg")
 
-        response_text = ""
-        last_error = ""
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as handle:
+            handle.write(image_bytes)
+            temp_path = Path(handle.name)
+
         try:
-            for model_id in self._models_to_try():
-                try:
-                    model = genai.GenerativeModel(model_id)
-                    image_part = {"mime_type": mime_type, "data": image_data}
-
-                    response = model.generate_content([prompt, image_part])
-                    response_text = self._strip_json_fence(response.text)
-                    analysis_dict = json.loads(response_text)
-                    analysis_dict["model_id"] = model_id
-                    validated = GeminiAnalysis.model_validate(analysis_dict)
-                    return validated.model_dump()
-                except Exception as e:
-                    last_error = f"{model_id}: {e}"
-                    continue
-
-            return {
-                "error": "Gemini API call failed for all configured models",
-                "details": last_error or "No model attempts were made",
-            }
-            
-        except json.JSONDecodeError as e:
-            return {
-                "error": "Failed to parse Gemini response as JSON",
-                "raw_response": response_text,
-                "details": str(e)
-            }
-        except Exception as e:
-            return {
-                "error": f"Gemini API call failed: {str(e)}",
-                "details": str(e)
-            }
+            return self.analyze_image_file(temp_path, context=context)
+        finally:
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass

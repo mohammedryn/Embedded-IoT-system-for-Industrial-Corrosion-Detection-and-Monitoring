@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from fusion.gateway import validate_before_fusion
-from fusion.specialists import AISettings, PromptTemplates, SpecialistService
+from fusion.specialists import AISettings, PromptTemplates, SpecialistService, load_corrosion_memory
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -17,7 +17,7 @@ class ScriptedClient:
         self.responses = list(responses)
         self.calls: list[dict[str, Any]] = []
 
-    def generate(self, *, model_id: str, prompt: str, timeout_seconds: float) -> str:
+    def generate_structured_text(self, *, model_id: str, prompt: str, timeout_seconds: float) -> str:
         self.calls.append(
             {
                 "model_id": model_id,
@@ -54,7 +54,12 @@ def _sensor_valid_json(cycle_id: str) -> str:
             "status_band": "HEALTHY",
             "electrochemical_severity_0_to_10": 1.2,
             "confidence_0_to_1": 0.91,
+            "expert_summary": "Electrochemical indicators remain in a healthy passive band.",
+            "mechanistic_interpretation": "High Rp and low current are consistent with low corrosion activity.",
+            "corrosion_mode": "passive",
             "key_findings": ["rp_high_healthy_band"],
+            "recommended_actions": ["Use this run as a baseline reference."],
+            "source_ids": ["metrohm_an_cor_003_2025"],
             "uncertainty_drivers": ["none"],
             "quality_flags": [],
             "degraded_mode": False,
@@ -75,7 +80,13 @@ def _vision_valid_json(cycle_id: str) -> str:
             "confidence_0_to_1": 0.85,
             "rust_coverage_band": "light",
             "morphology_class": "uniform",
+            "surface_summary": "Only light, mostly uniform discoloration is visible.",
+            "pit_suspected": False,
+            "pit_evidence": "no distinct pit morphology observed",
+            "suspected_damage_modes": ["surface_discoloration"],
             "key_findings": ["light_rust_visible"],
+            "recommended_actions": ["Capture a second image if localized attack is suspected."],
+            "source_ids": ["orientjchem_neutral_chloride_2019"],
             "uncertainty_drivers": ["none"],
             "quality_flags": [],
             "degraded_mode": False,
@@ -153,10 +164,28 @@ class TestC05Specialists(unittest.TestCase):
         self.assertIn("stale_result", stale["quality_flags"])
         self.assertIn("stale_fallback_used", stale["uncertainty_drivers"])
 
+    def test_final_interpretation_timeout_returns_degraded_payload(self) -> None:
+        client = ScriptedClient([TimeoutError("final timeout"), TimeoutError("final timeout")])
+        svc = SpecialistService(PROJECT_ROOT, client, settings=_settings(max_attempts=2), sleep_fn=lambda _: None)
+
+        result = svc.run_final_interpretation(
+            cycle_id="cyc-final-1",
+            orchestrator_input={"fused": {"confidence_0_to_1": 0.41}},
+        )
+
+        self.assertTrue(result["degraded_mode"])
+        self.assertTrue(result["stale"])
+        self.assertEqual(result["schema_version"], "c05-final-v1")
+        self.assertIn("timeout", result["fallback_reason"])
+
     def test_prompt_templates_are_deterministic(self) -> None:
         a = {"b": 2, "a": 1}
         b = {"a": 1, "b": 2}
-        self.assertEqual(PromptTemplates.build_sensor_prompt(a), PromptTemplates.build_sensor_prompt(b))
+        memory = load_corrosion_memory(PROJECT_ROOT)
+        self.assertEqual(
+            PromptTemplates.build_sensor_prompt(a, memory),
+            PromptTemplates.build_sensor_prompt(b, memory),
+        )
 
 
 if __name__ == "__main__":

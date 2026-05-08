@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Quick image capture and Gemini analysis - single command."""
+"""Quick image capture and Vertex analysis - single command."""
 from __future__ import annotations
 
 import argparse
@@ -129,7 +129,7 @@ def capture_image_raspistill(output_path: Path) -> Path | None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Capture image + analyze with Gemini",
+        description="Capture image + analyze with Vertex AI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -146,12 +146,28 @@ Examples:
     parser.add_argument(
         "--api-key",
         type=str,
-        help="Gemini API key (or set GOOGLE_API_KEY env var)"
+        help="Deprecated; API-key Gemini auth is no longer used"
     )
     parser.add_argument(
         "--model",
         type=str,
-        help="Gemini model ID (e.g., gemini-3-flash-preview)"
+        help="Vertex model ID (e.g., gemini-2.5-flash)"
+    )
+    parser.add_argument(
+        "--auth-mode",
+        type=str,
+        choices=["auto", "adc", "service_account", "disabled"],
+        help="Vertex auth mode override"
+    )
+    parser.add_argument(
+        "--project-id",
+        type=str,
+        help="Vertex project ID override"
+    )
+    parser.add_argument(
+        "--location",
+        type=str,
+        help="Vertex location override"
     )
     parser.add_argument(
         "--output",
@@ -202,13 +218,19 @@ Examples:
 
     # Initialize Gemini client
     try:
-        client = GeminiVisionClient(api_key=args.api_key, model_id=args.model)
+        client = GeminiVisionClient(
+            api_key=args.api_key,
+            model_id=args.model,
+            auth_mode=args.auth_mode,
+            project_id=args.project_id,
+            location=args.location,
+        )
     except ValueError as e:
         print(f"❌ {e}")
         sys.exit(1)
 
     # Analyze image
-    print("🔍 Analyzing with Gemini...")
+    print("🔍 Analyzing with Vertex AI...")
     result = client.analyze_image_file(image_path)
 
     if "error" in result:
@@ -219,7 +241,7 @@ Examples:
 
     # Display results
     print("\n" + "="*60)
-    print("GEMINI ANALYSIS RESULTS")
+    print("VERTEX ANALYSIS RESULTS")
     print("="*60)
     
     if "text_summary" in result:

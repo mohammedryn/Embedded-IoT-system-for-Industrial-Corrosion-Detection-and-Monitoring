@@ -39,12 +39,9 @@ serial_reader = SerialFrameReader(port=DEFAULT_PORT, baud=DEFAULT_BAUD, max_fram
 _svc_lock = threading.Lock()
 _vision_pipeline = None
 _fusion_service = None
-_specialist_init_attempted = False
+_ai_provider = None
 _specialist_service = None
 _specialist_init_error = ""
-_vision_ai_client = None
-_vision_ai_init_attempted = False
-_vision_ai_init_error = ""
 
 
 class _CameraPreviewWorker:
@@ -202,88 +199,78 @@ def _get_fusion_service():
     return _fusion_service
 
 
-class _GeminiModelClient:
-    """Wraps google.generativeai to satisfy the fusion.specialists.ModelClient protocol."""
+def _get_ai_provider():
+    global _ai_provider
+    if _ai_provider is None:
+        with _svc_lock:
+            if _ai_provider is None:
+                from ai.providers.local import LocalHeuristicProvider
+                from ai.providers.vertex import VertexAIProvider
+                from ai.runtime import load_ai_config
 
-    def generate(self, *, model_id: str, prompt: str, timeout_seconds: float) -> str:
-        import google.generativeai as genai
-        model = genai.GenerativeModel(model_id)
-        ex = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        fut = ex.submit(lambda: model.generate_content(prompt).text)
-        try:
-            return fut.result(timeout=timeout_seconds)
-        except concurrent.futures.TimeoutError:
-            fut.cancel()
-            raise TimeoutError(f"Gemini {model_id} exceeded {timeout_seconds}s")
-        finally:
-            # Do not wait for a stuck model call thread; the request path already timed out.
-            ex.shutdown(wait=False, cancel_futures=True)
+                config = load_ai_config(PROJECT_ROOT)
+                if config.provider == "vertex":
+                    _ai_provider = VertexAIProvider(config=config)
+                else:
+                    _ai_provider = LocalHeuristicProvider(config=config)
+    return _ai_provider
 
 
 def _get_specialist_service():
-    """Return a SpecialistService wired to Gemini if GOOGLE_API_KEY is set, else None."""
-    global _specialist_init_attempted, _specialist_service, _specialist_init_error
-    if not _specialist_init_attempted:
+    """Return a SpecialistService wired to the active provider when cloud mode is usable."""
+    global _specialist_service, _specialist_init_error
+    provider = _get_ai_provider()
+    runtime = provider.describe_runtime()
+    if runtime.get("runtime_mode") != "vertex_expert":
+        _specialist_init_error = runtime.get("degraded_reason", "") or runtime.get("auth_source", "cloud_unavailable")
+        return None
+
+    if _specialist_service is None:
         with _svc_lock:
-            if not _specialist_init_attempted:
-                _specialist_init_attempted = True
-                if os.environ.get("GOOGLE_API_KEY"):
-                    try:
-                        from fusion.specialists import SpecialistService, load_ai_settings
-                        _specialist_service = SpecialistService(
-                            project_root=PROJECT_ROOT,
-                            client=_GeminiModelClient(),
-                            settings=load_ai_settings(PROJECT_ROOT),
-                        )
-                        _specialist_init_error = ""
-                    except Exception as exc:
-                        _specialist_init_error = f"init_failed:{type(exc).__name__}"
-                else:
-                    _specialist_init_error = "api_key_missing"
+            if _specialist_service is None:
+                try:
+                    from fusion.specialists import SpecialistService, load_ai_settings
+
+                    _specialist_service = SpecialistService(
+                        project_root=PROJECT_ROOT,
+                        client=provider,
+                        settings=load_ai_settings(PROJECT_ROOT),
+                    )
+                    _specialist_init_error = ""
+                except Exception as exc:
+                    _specialist_init_error = f"init_failed:{type(exc).__name__}"
     return _specialist_service
 
 
-def _get_gemini_vision_client():
-    """Return GeminiVisionClient when GOOGLE_API_KEY is present, else None."""
-    global _vision_ai_client, _vision_ai_init_attempted, _vision_ai_init_error
-    if not _vision_ai_init_attempted:
-        with _svc_lock:
-            if not _vision_ai_init_attempted:
-                _vision_ai_init_attempted = True
-                if os.environ.get("GOOGLE_API_KEY"):
-                    try:
-                        from vision.gemini_client import GeminiVisionClient
-                        _vision_ai_client = GeminiVisionClient()
-                        _vision_ai_init_error = ""
-                    except Exception as exc:
-                        _vision_ai_init_error = f"vision_init_failed:{type(exc).__name__}"
-                else:
-                    _vision_ai_init_error = "api_key_missing"
-    return _vision_ai_client
-
-
 def _analysis_runtime_meta(svc) -> dict:
-    api_key_present = bool(os.environ.get("GOOGLE_API_KEY"))
-    if svc is not None:
-        return {
-            "mode": "gemini_specialists",
-            "api_key_present": api_key_present,
-            "specialists_ready": True,
-            "message": "Gemini specialists enabled",
-        }
+    provider = _get_ai_provider()
+    runtime = dict(provider.describe_runtime())
+    mode = str(runtime.get("runtime_mode", "local_heuristic"))
 
-    if not api_key_present:
-        message = "GOOGLE_API_KEY missing; using local heuristic mode"
-    elif _specialist_init_error:
-        message = f"Gemini unavailable ({_specialist_init_error}); using local heuristic mode"
-    else:
-        message = "Gemini unavailable; using local heuristic mode"
+    if svc is not None:
+        payloads = getattr(svc, "_latest_runtime_payloads", None) or {}
+        any_degraded = any(bool((payloads.get(key) or {}).get("degraded_mode", False)) for key in ("sensor", "vision", "final"))
+        if mode == "vertex_expert" and any_degraded:
+            mode = "vertex_degraded"
+
+    message = {
+        "vertex_expert": "Vertex specialists enabled",
+        "vertex_degraded": "Vertex analysis degraded; deterministic fallbacks were used for part of the request",
+        "local_heuristic": "Cloud analysis unavailable; using local heuristic mode",
+    }.get(mode, "AI runtime unknown")
 
     return {
-        "mode": "local_heuristic",
-        "api_key_present": api_key_present,
-        "specialists_ready": False,
+        "mode": mode,
+        "provider": str(runtime.get("provider", "local_heuristic")),
+        "auth_mode": str(runtime.get("auth_mode", "disabled")),
+        "auth_source": str(runtime.get("auth_source", "none")),
+        "project_id": str(runtime.get("project_id", "")),
+        "location": str(runtime.get("location", "global")),
+        "cloud_enabled": bool(runtime.get("cloud_enabled", False)),
+        "circuit_breaker_open": bool(runtime.get("circuit_breaker_open", False)),
+        "specialists_ready": svc is not None,
         "message": message,
+        "degraded_reason": str(runtime.get("degraded_reason", "")),
     }
 
 
@@ -426,28 +413,63 @@ def _map_gemini_image_result_to_vision_payload(
     }
 
 
-def _ai_vision_payload_from_photos(photos: list, cycle_id: str) -> dict:
+def _build_cloud_vision_prompt(context: dict) -> str:
+    return f"""You are a corrosion-vision specialist reviewing a steel or stainless-steel surface image.
+Return STRICT JSON only (no markdown, no prose, no code fences).
+
+Use cautious corrosion language and preserve the local visual summary when uncertain.
+
+Return exactly this schema:
+{{
+  "text_summary": "2-4 sentence technical description of what the surface visually suggests",
+  "rust_coverage_estimate": "none|light|moderate|heavy",
+  "surface_condition": "uniform|pitted|localized|mixed|other",
+  "severity_0_to_10": 3.5,
+  "confidence_0_to_1": 0.85,
+  "pitting_observed": false,
+  "pitting_evidence": "brief explanation",
+  "suspected_damage_modes": ["mode1", "mode2"],
+  "suspicious_regions": ["region1", "region2"],
+  "corrosion_spot_count_estimate": "none|few|several|many|unknown",
+  "surface_limitations": ["limitation1"],
+  "key_findings": ["finding1", "finding2", "finding3"],
+  "recommendations": ["recommendation1", "recommendation2"],
+  "model_id": "the model id that produced this answer"
+}}
+
+Context JSON:
+{json.dumps(context, sort_keys=True, indent=2)}
+"""
+
+
+def _ai_vision_payload_from_photos(photos: list, cycle_id: str, provider=None) -> dict:
     raw, source_photo = _best_vision_observation(photos, cycle_id)
     if raw is None:
         return _no_vision_payload(cycle_id)
 
-    client = _get_gemini_vision_client()
-    if client is None or source_photo is None:
+    provider = provider or _get_ai_provider()
+    runtime = provider.describe_runtime() if provider is not None else {"runtime_mode": "local_heuristic"}
+    if source_photo is None or runtime.get("runtime_mode") != "vertex_expert" or not hasattr(provider, "analyze_image_with_context"):
         payload = _build_vision_payload(raw, cycle_id)
-        payload["fallback_reason"] = _vision_ai_init_error or payload.get("fallback_reason", "")
         return payload
 
     try:
-        gemini_result = client.analyze_image_file(
-            source_photo["path"],
-            context={
-                "cycle_id": cycle_id,
-                "project_mode": "corrosion_lab_surface_assessment",
-                "local_vision_summary": raw,
-                "photo_count": len(photos),
-                "research_hint": "Interpret chloride-exposed steel or stainless steel cautiously with respect to localized attack.",
-            },
+        context = {
+            "cycle_id": cycle_id,
+            "project_mode": "corrosion_lab_surface_assessment",
+            "local_vision_summary": raw,
+            "photo_count": len(photos),
+            "research_hint": "Interpret chloride-exposed steel or stainless steel cautiously with respect to localized attack.",
+        }
+        response_text = provider.analyze_image_with_context(
+            image_path=source_photo["path"],
+            prompt=_build_cloud_vision_prompt(context),
+            model_id=str(runtime.get("primary_model_id", runtime.get("fallback_model_id", "gemini-2.5-flash"))),
+            timeout_seconds=10.0,
         )
+        gemini_result = json.loads(response_text)
+        if not isinstance(gemini_result, dict):
+            raise ValueError("cloud vision response root is not an object")
         if "error" in gemini_result:
             payload = _build_vision_payload(raw, cycle_id)
             payload["fallback_reason"] = f"gemini_vision_error:{gemini_result.get('error', 'unknown')}"
@@ -717,9 +739,9 @@ def _build_analysis_report(
         quality_points.append("Vision quality flags: " + ", ".join(vision_quality) + ".")
     if sensor_uncertainty and sensor_uncertainty != ["none"]:
         quality_points.append("Electrochemical uncertainty drivers: " + ", ".join(sensor_uncertainty) + ".")
-    if ai_mode != "gemini_specialists":
+    if ai_mode != "vertex_expert":
         quality_points.append(
-            "This report is being generated from the local heuristic pathway rather than the Gemini specialist pathway, so the interpretation is more deterministic than expert-like."
+            "This report is being generated from a degraded or local heuristic pathway rather than the full Vertex specialist pathway, so the interpretation is more deterministic than expert-like."
         )
 
     recommendation_points = []
@@ -782,6 +804,19 @@ def _no_vision_payload(cycle_id: str) -> dict:
         "fallback_reason": "no_photos",
         "model_id": "heuristic-v1", "schema_version": "c05-vision-v1",
     }
+
+
+def _mark_payload_degraded(payload: dict, fallback_reason: str) -> dict:
+    degraded = dict(payload)
+    degraded["degraded_mode"] = True
+    degraded["fallback_reason"] = fallback_reason
+    degraded.setdefault("stale", False)
+    uncertainty = list(degraded.get("uncertainty_drivers", []))
+    if fallback_reason and fallback_reason not in uncertainty:
+        uncertainty.append(fallback_reason)
+    if "uncertainty_drivers" in degraded:
+        degraded["uncertainty_drivers"] = uncertainty
+    return degraded
 
 
 def _default_state_payload():
@@ -1350,98 +1385,36 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         cycle_id = f"lab-{_uuid.uuid4().hex[:12]}"
+        from ai.runtime import load_ai_config
+
+        ai_config = load_ai_config(PROJECT_ROOT)
+        provider = _get_ai_provider()
         svc = _get_specialist_service()
-        ai_runtime = _analysis_runtime_meta(svc)
-        specialist_timeout_seconds = 30.0
-        final_report_timeout_seconds = 15.0
+        initial_ai_runtime = _analysis_runtime_meta(svc)
 
-        if svc is not None:
-            # AI specialist path: sensor and vision both route through Gemini concurrently.
-            rp_values = [r["rp_ohm"] for r in readings if r.get("rp_ohm", 0) > 0]
-            mean_rp = sum(rp_values) / len(rp_values) if rp_values else 0.0
-            current_values = [r.get("current_ua", 0.0) for r in readings]
-            mean_current_ma = (sum(current_values) / len(current_values) / 1000.0) if current_values else 0.0
-            last_status = readings[-1].get("status", "UNKNOWN").upper() if readings else "UNKNOWN"
+        def _local_vision_fn() -> dict:
+            try:
+                raw = _best_vision_result(photos, cycle_id)
+                if raw is None:
+                    return _no_vision_payload(cycle_id)
+                return _build_vision_payload(raw, cycle_id)
+            except Exception as exc:
+                vp = _no_vision_payload(cycle_id)
+                vp["fallback_reason"] = f"pipeline_init_error:{type(exc).__name__}"
+                return vp
 
-            def _sensor_fn() -> dict:
-                return svc.run_sensor(
-                    cycle_id=cycle_id,
-                    sensor_input={
-                        "rp_ohm": mean_rp,
-                        "current_ma": mean_current_ma,
-                        "status_band": last_status,
-                    },
-                )
+        tv0 = time.time()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            vf = pool.submit(_local_vision_fn)
+            ts0 = time.time()
+            local_sensor_payload = _build_sensor_payload(readings, cycle_id)
+            timing_sensor_ms = (time.time() - ts0) * 1000
+            local_vision_payload = vf.result()
+        timing_vision_ms = (time.time() - tv0) * 1000
 
-            def _vision_fn() -> dict:
-                try:
-                    ai_vision_input = _ai_vision_payload_from_photos(photos, cycle_id)
-                    if ai_vision_input.get("fallback_reason") == "no_photos":
-                        return ai_vision_input
-                    return svc.run_vision(
-                        cycle_id=cycle_id,
-                        vision_input={
-                            "visual_severity_0_to_10": ai_vision_input.get("visual_severity_0_to_10", 5.0),
-                            "confidence_0_to_1": ai_vision_input.get("confidence_0_to_1", 0.3),
-                            "rust_coverage_band": ai_vision_input.get("rust_coverage_band", "unknown"),
-                            "morphology_class": ai_vision_input.get("morphology_class", "unknown"),
-                            "surface_summary": ai_vision_input.get("surface_summary", ""),
-                            "pit_suspected": ai_vision_input.get("pit_suspected", False),
-                            "pit_evidence": ai_vision_input.get("pit_evidence", "not_assessed"),
-                            "suspected_damage_modes": ai_vision_input.get("suspected_damage_modes", ["unknown"]),
-                            "key_findings": ai_vision_input.get("key_findings", ["no_valid_visual_signal"]),
-                            "recommended_actions": ai_vision_input.get("recommended_actions", []),
-                            "source_ids": ai_vision_input.get("source_ids", []),
-                            "uncertainty_drivers": ai_vision_input.get("uncertainty_drivers", []),
-                            "quality_flags": ai_vision_input.get("quality_flags", []),
-                        },
-                    )
-                except Exception as exc:
-                    vp = _no_vision_payload(cycle_id)
-                    vp["fallback_reason"] = f"pipeline_init_error:{type(exc).__name__}"
-                    return vp
-
-            t_spec = time.time()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-                sf = pool.submit(_sensor_fn)
-                vf = pool.submit(_vision_fn)
-                try:
-                    sensor_payload = sf.result(timeout=specialist_timeout_seconds)
-                    ts1 = time.time()
-                    vision_payload = vf.result(timeout=specialist_timeout_seconds)
-                    tv1 = time.time()
-                except concurrent.futures.TimeoutError:
-                    sf.cancel()
-                    vf.cancel()
-                    self._send_json(504, {
-                        "ok": False,
-                        "error": "analysis_timeout",
-                        "detail": f"AI specialist call exceeded {int(specialist_timeout_seconds)}s",
-                    })
-                    return
-            timing_sensor_ms = (ts1 - t_spec) * 1000
-            timing_vision_ms = (tv1 - t_spec) * 1000
-        else:
-            # Heuristic path: vision runs in background, sensor heuristic on main thread.
-            def _vision_fn() -> dict:
-                try:
-                    raw = _best_vision_result(photos, cycle_id)
-                    if raw is None:
-                        return _no_vision_payload(cycle_id)
-                    return _build_vision_payload(raw, cycle_id)
-                except Exception as exc:
-                    vp = _no_vision_payload(cycle_id)
-                    vp["fallback_reason"] = f"pipeline_init_error:{type(exc).__name__}"
-                    return vp
-
-            tv0 = time.time()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                vf = pool.submit(_vision_fn)
-                ts0 = time.time()
-                sensor_payload = _build_sensor_payload(readings, cycle_id)
-                timing_sensor_ms = (time.time() - ts0) * 1000
-                vision_payload = vf.result()
-            timing_vision_ms = (time.time() - tv0) * 1000
+        sensor_payload = dict(local_sensor_payload)
+        vision_payload = dict(local_vision_payload)
+        ai_specialists_used = False
 
         try:
             tf0 = time.time()
@@ -1452,7 +1425,73 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(500, {"ok": False, "error": "fusion_failed", "detail": str(exc)})
             return
 
+        if svc is not None:
+            ai_specialists_used = True
+
+            def _sensor_fn() -> dict:
+                return svc.run_sensor(
+                    cycle_id=cycle_id,
+                    sensor_input={
+                        "rp_ohm": local_sensor_payload.get("rp_ohm", 0.0),
+                        "current_ma": local_sensor_payload.get("current_ma", 0.0),
+                        "status_band": local_sensor_payload.get("status_band", "UNKNOWN"),
+                        "electrochemical_severity_0_to_10": local_sensor_payload.get("electrochemical_severity_0_to_10", 5.0),
+                        "confidence_0_to_1": local_sensor_payload.get("confidence_0_to_1", 0.2),
+                    },
+                )
+
+            def _vision_fn() -> dict:
+                ai_vision_input = _ai_vision_payload_from_photos(photos, cycle_id, provider)
+                if ai_vision_input.get("fallback_reason") == "no_photos":
+                    return ai_vision_input
+                return svc.run_vision(
+                    cycle_id=cycle_id,
+                    vision_input={
+                        "visual_severity_0_to_10": ai_vision_input.get("visual_severity_0_to_10", 5.0),
+                        "confidence_0_to_1": ai_vision_input.get("confidence_0_to_1", 0.3),
+                        "rust_coverage_band": ai_vision_input.get("rust_coverage_band", "unknown"),
+                        "morphology_class": ai_vision_input.get("morphology_class", "unknown"),
+                        "surface_summary": ai_vision_input.get("surface_summary", ""),
+                        "pit_suspected": ai_vision_input.get("pit_suspected", False),
+                        "pit_evidence": ai_vision_input.get("pit_evidence", "not_assessed"),
+                        "suspected_damage_modes": ai_vision_input.get("suspected_damage_modes", ["unknown"]),
+                        "key_findings": ai_vision_input.get("key_findings", ["no_valid_visual_signal"]),
+                        "recommended_actions": ai_vision_input.get("recommended_actions", []),
+                        "source_ids": ai_vision_input.get("source_ids", []),
+                        "uncertainty_drivers": ai_vision_input.get("uncertainty_drivers", []),
+                        "quality_flags": ai_vision_input.get("quality_flags", []),
+                    },
+                )
+
+            t_spec = time.time()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                sf = pool.submit(_sensor_fn)
+                vf = pool.submit(_vision_fn)
+                try:
+                    sensor_payload = sf.result(timeout=max(ai_config.sensor_timeout_seconds, 1.0) + 2.0)
+                except concurrent.futures.TimeoutError:
+                    sf.cancel()
+                    sensor_payload = _mark_payload_degraded(local_sensor_payload, "sensor_specialist_timeout")
+                try:
+                    vision_payload = vf.result(timeout=max(ai_config.vision_timeout_seconds, 1.0) + 2.0)
+                except concurrent.futures.TimeoutError:
+                    vf.cancel()
+                    vision_payload = _mark_payload_degraded(local_vision_payload, "vision_specialist_timeout")
+            timing_sensor_ms = max(timing_sensor_ms, (time.time() - t_spec) * 1000)
+            timing_vision_ms = max(timing_vision_ms, (time.time() - t_spec) * 1000)
+
+            try:
+                tf0 = time.time()
+                fused = fs.fuse(cycle_id=cycle_id, sensor_payload=sensor_payload, vision_payload=vision_payload)
+                tf1 = time.time()
+            except Exception as exc:
+                self._send_json(500, {"ok": False, "error": "fusion_failed", "detail": str(exc)})
+                return
+
+            svc._latest_runtime_payloads = {"sensor": sensor_payload, "vision": vision_payload}
+
         input_counts = {"photos": len(photos), "readings": len(readings)}
+        ai_runtime = _analysis_runtime_meta(svc)
         report = _build_analysis_report(
             sensor_payload=sensor_payload,
             vision_payload=vision_payload,
@@ -1460,7 +1499,7 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             input_counts=input_counts,
             ai_runtime=ai_runtime,
         )
-        if svc is not None:
+        if svc is not None and ai_config.enable_cloud_orchestrator:
             try:
                 def _final_report_fn() -> dict:
                     return svc.run_final_interpretation(
@@ -1470,13 +1509,23 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
                             "vision": vision_payload,
                             "fused": fused,
                             "input_counts": input_counts,
-                            "ai_runtime": ai_runtime,
+                            "ai_runtime": initial_ai_runtime,
                         },
                     )
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                     ff = pool.submit(_final_report_fn)
-                    ai_report = ff.result(timeout=final_report_timeout_seconds)
+                    ai_report = ff.result(timeout=max(ai_config.final_report_timeout_seconds, 1.0) + 1.0)
+
+                svc._latest_runtime_payloads = {"sensor": sensor_payload, "vision": vision_payload, "final": ai_report}
+                ai_runtime = _analysis_runtime_meta(svc)
+                report = _build_analysis_report(
+                    sensor_payload=sensor_payload,
+                    vision_payload=vision_payload,
+                    fused_payload=fused,
+                    input_counts=input_counts,
+                    ai_runtime=ai_runtime,
+                )
 
                 report = {
                     "headline": ai_report.get("headline", report.get("headline", "")),
@@ -1506,7 +1555,7 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             "session_id": session_state.session_id,
             "cycle_id": cycle_id,
             "input_counts": input_counts,
-            "ai_specialists_used": svc is not None,
+            "ai_specialists_used": ai_specialists_used,
             "ai_runtime": ai_runtime,
             "sensor": sensor_payload,
             "vision": vision_payload,

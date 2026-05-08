@@ -446,7 +446,22 @@ def test_analyze_success_with_mocked_services(running_server):
                 "rationale": "mock rationale",
             }
 
+    class _FakeProvider:
+        def describe_runtime(self):
+            return {
+                "provider": "local_heuristic",
+                "runtime_mode": "local_heuristic",
+                "auth_mode": "disabled",
+                "auth_source": "disabled",
+                "project_id": "",
+                "location": "global",
+                "cloud_enabled": False,
+                "circuit_breaker_open": False,
+                "degraded_reason": "",
+            }
+
     # Force heuristic path (no Gemini specialist).
+    monkeypatch.setattr(web_server, "_get_ai_provider", lambda: _FakeProvider(), raising=False)
     monkeypatch.setattr(web_server, "_get_specialist_service", lambda: None)
     monkeypatch.setattr(web_server, "_vision_pipeline", _FakeVP())
     monkeypatch.setattr(web_server, "_fusion_service", _FakeFS())
@@ -461,6 +476,10 @@ def test_analyze_success_with_mocked_services(running_server):
     assert payload["input_counts"]["photos"] == 1
     assert payload["input_counts"]["readings"] == 5
     assert payload["ai_specialists_used"] is False
+    assert payload["ai_runtime"]["mode"] == "local_heuristic"
+    assert payload["ai_runtime"]["provider"] == "local_heuristic"
+    assert payload["ai_runtime"]["auth_mode"] == "disabled"
+    assert payload["ai_runtime"]["cloud_enabled"] is False
     assert "sensor" in payload
     assert "vision" in payload
     assert "fused" in payload
@@ -519,6 +538,21 @@ def test_analyze_uses_specialist_service_when_set(running_server):
             return {"fused_severity_0_to_10": 3.8, "rul_days": 180.0,
                     "confidence_0_to_1": 0.82}
 
+    class _FakeProvider:
+        def describe_runtime(self):
+            return {
+                "provider": "vertex",
+                "runtime_mode": "vertex_expert",
+                "auth_mode": "adc",
+                "auth_source": "adc",
+                "project_id": "corrosion-lab",
+                "location": "us-central1",
+                "cloud_enabled": True,
+                "circuit_breaker_open": False,
+                "degraded_reason": "",
+            }
+
+    monkeypatch.setattr(web_server, "_get_ai_provider", lambda: _FakeProvider(), raising=False)
     monkeypatch.setattr(web_server, "_get_specialist_service", lambda: _FakeSVC())
     monkeypatch.setattr(web_server, "_vision_pipeline", _FakeVP())
     monkeypatch.setattr(web_server, "_fusion_service", _FakeFS())
@@ -529,8 +563,148 @@ def test_analyze_uses_specialist_service_when_set(running_server):
     payload = json.loads(raw.decode())
     assert payload["ok"] is True
     assert payload["ai_specialists_used"] is True
+    assert payload["ai_runtime"]["mode"] == "vertex_expert"
+    assert payload["ai_runtime"]["provider"] == "vertex"
+    assert payload["ai_runtime"]["auth_mode"] == "adc"
+    assert payload["ai_runtime"]["cloud_enabled"] is True
     assert "specialist_sensor_finding" in payload["sensor"]["key_findings"]
     assert "specialist_vision_finding" in payload["vision"]["key_findings"]
     assert payload["sensor"]["model_id"] == "gemini-3-flash-preview"
     assert payload["vision"]["model_id"] == "gemini-3-flash-preview"
     assert payload["fused"]["rul_days"] == pytest.approx(180.0)
+
+
+def test_analyze_returns_structured_json_when_cloud_path_degrades(running_server):
+    host, port, monkeypatch = running_server
+    web_server.session_state.new_session()
+
+    web_server.session_state.add_photo("/tmp/test_degraded_analyze.jpg")
+    for i in range(5):
+        web_server.session_state.add_reading(
+            {"seq": i, "rp_ohm": 15000.0, "current_ua": 0.8, "status": "FAIR"}
+        )
+
+    class _FakeVP:
+        def analyze_image(self, path, cycle_id):
+            return {
+                "visual_severity_0_to_10": 4.0,
+                "confidence_0_to_1": 0.65,
+                "rust_coverage_band": "moderate",
+                "morphology_class": "localized",
+                "key_findings": ["local_signal"],
+                "uncertainty_drivers": [],
+                "quality_flags": [],
+                "degraded_mode": False,
+                "fallback_reason": "",
+            }
+
+    class _FakeSVC:
+        def run_sensor(self, *, cycle_id, sensor_input):
+            return {
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "cycle_id": cycle_id,
+                "rp_ohm": sensor_input["rp_ohm"],
+                "current_ma": sensor_input["current_ma"],
+                "status_band": sensor_input["status_band"],
+                "electrochemical_severity_0_to_10": 5.2,
+                "confidence_0_to_1": 0.68,
+                "expert_summary": "Cloud sensor specialist degraded cleanly.",
+                "mechanistic_interpretation": "Fallback-safe sensor summary.",
+                "corrosion_mode": "active",
+                "key_findings": ["cloud_sensor_degraded"],
+                "recommended_actions": ["repeat test"],
+                "source_ids": ["metrohm_an_cor_003_2025"],
+                "uncertainty_drivers": ["quota_exceeded"],
+                "quality_flags": [],
+                "degraded_mode": True,
+                "stale": False,
+                "fallback_reason": "quota_exceeded",
+                "model_id": "gemini-2.5-flash",
+                "schema_version": "c05-sensor-v1",
+            }
+
+        def run_vision(self, *, cycle_id, vision_input):
+            return {
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "cycle_id": cycle_id,
+                "visual_severity_0_to_10": 4.1,
+                "confidence_0_to_1": 0.61,
+                "rust_coverage_band": "moderate",
+                "morphology_class": "localized",
+                "surface_summary": "Cloud vision specialist degraded cleanly.",
+                "pit_suspected": False,
+                "pit_evidence": "not_confirmed",
+                "suspected_damage_modes": ["localized_attack"],
+                "key_findings": ["cloud_vision_degraded"],
+                "recommended_actions": ["capture again"],
+                "source_ids": ["orientjchem_neutral_chloride_2019"],
+                "uncertainty_drivers": ["quota_exceeded"],
+                "quality_flags": [],
+                "degraded_mode": True,
+                "stale": False,
+                "fallback_reason": "quota_exceeded",
+                "model_id": "gemini-2.5-flash",
+                "schema_version": "c05-vision-v1",
+            }
+
+        def run_final_interpretation(self, *, cycle_id, orchestrator_input):
+            return {
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "cycle_id": cycle_id,
+                "headline": "Degraded cloud report",
+                "overall_condition": "warning",
+                "executive_summary": "Cloud orchestration degraded but returned structured JSON.",
+                "electrochemical_assessment": ["sensor degraded"],
+                "vision_assessment": ["vision degraded"],
+                "cross_modal_assessment": ["fusion preserved"],
+                "limitations": ["quota exceeded"],
+                "recommendations": ["retry later"],
+                "confidence_0_to_1": 0.55,
+                "source_ids": ["metrohm_an_cor_003_2025"],
+                "degraded_mode": True,
+                "stale": False,
+                "fallback_reason": "quota_exceeded",
+                "model_id": "gemini-2.5-pro",
+                "schema_version": "c05-final-v1",
+            }
+
+    class _FakeFS:
+        def fuse(self, **kwargs):
+            return {
+                "fused_severity_0_to_10": 4.5,
+                "rul_days": 140.0,
+                "confidence_0_to_1": 0.58,
+                "degraded_mode": True,
+                "rationale": "degraded but structured",
+            }
+
+    class _FakeProvider:
+        def describe_runtime(self):
+            return {
+                "provider": "vertex",
+                "runtime_mode": "vertex_expert",
+                "auth_mode": "adc",
+                "auth_source": "adc",
+                "project_id": "corrosion-lab",
+                "location": "us-central1",
+                "cloud_enabled": True,
+                "circuit_breaker_open": False,
+                "degraded_reason": "",
+            }
+
+    monkeypatch.setattr(web_server, "_get_ai_provider", lambda: _FakeProvider(), raising=False)
+    monkeypatch.setattr(web_server, "_get_specialist_service", lambda: _FakeSVC())
+    monkeypatch.setattr(web_server, "_vision_pipeline", _FakeVP())
+    monkeypatch.setattr(web_server, "_fusion_service", _FakeFS())
+
+    status, raw = _request_json("POST", host, port, "/api/session/analyze", body={"min_readings": 5})
+    assert status == 200
+    payload = json.loads(raw.decode())
+    assert payload["ok"] is True
+    assert payload["ai_specialists_used"] is True
+    assert payload["ai_runtime"]["mode"] == "vertex_degraded"
+    assert payload["ai_runtime"]["provider"] == "vertex"
+    assert payload["sensor"]["degraded_mode"] is True
+    assert payload["vision"]["degraded_mode"] is True
+    assert payload["report"]["ai_detailed_report"]["degraded_mode"] is True
+    assert set(payload.keys()) >= {"sensor", "vision", "fused", "report", "ai_runtime", "timing"}

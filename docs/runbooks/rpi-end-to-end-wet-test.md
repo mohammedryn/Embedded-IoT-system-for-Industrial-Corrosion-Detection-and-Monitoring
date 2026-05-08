@@ -97,17 +97,33 @@ Expected outputs:
 
 These do not test your real electrodes. They only confirm the project environment and validation tooling are healthy.
 
-## 5. Optional: Configure Gemini
+## 5. Optional: Configure Vertex AI
 
 This step is optional. The core measurement path works without cloud AI.
 
-If you want Gemini-enabled analysis:
+If you want cloud-backed analysis, choose one of these auth modes:
 
 ```bash
-export GOOGLE_API_KEY='your-real-key-here'
+CORR__AI__AUTH_MODE=adc python3 edge/web_server.py
 ```
 
-If you skip this step, the project falls back to local heuristic mode for analysis.
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS='/abs/path/to/service-account.json'
+CORR__AI__AUTH_MODE=service_account python3 edge/web_server.py
+```
+
+```bash
+CORR__AI__AUTH_MODE=disabled python3 edge/web_server.py
+```
+
+Mode behavior:
+
+- `adc`: prefer Application Default Credentials for interactive Pi usage
+- `service_account`: use the explicit JSON credentials file
+- `disabled`: force `local_heuristic` mode
+- `auto`: default behavior; tries service-account first, then ADC, then falls back locally
+
+If you skip cloud auth entirely, the project still starts and uses `local_heuristic` mode for analysis.
 
 ## 6. Flash the Teensy Firmware
 
@@ -476,9 +492,9 @@ curl -sS -X POST http://127.0.0.1:8080/api/session/analyze \
   -d '{"min_readings":5}' | jq .
 ```
 
-If `GOOGLE_API_KEY` is set and valid, this may use Gemini specialists.
+If Vertex auth is available and healthy, the response should report `ai_runtime.mode = "vertex_expert"`.
 
-If not, it will fall back to local heuristic mode as long as the image and readings are present.
+If cloud auth is missing, quota-limited, timed out, or otherwise degraded, the response still returns structured JSON and reports either `vertex_degraded` or `local_heuristic`.
 
 ## 19. Optional Accelerated Corrosion Demo
 

@@ -10,12 +10,12 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-try:
-    from vision.gemini_client import GeminiVisionClient
-    from edge.potentiostat_client import SyntheticSensorGenerator, PotentiostatGeminiClient
-except ModuleNotFoundError:
-    from gemini_client import GeminiVisionClient
-    from potentiostat_client import SyntheticSensorGenerator, PotentiostatGeminiClient
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from vision.gemini_client import GeminiVisionClient
+from edge.potentiostat_client import SyntheticSensorGenerator, PotentiostatGeminiClient
 
 
 def _find_recent_image(capture_dir: Path, start_time: float) -> Path | None:
@@ -105,7 +105,7 @@ def capture_image_raspistill(output_path: Path) -> Path | None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Unified vision + potentiostat analysis (capture + synthetic sensor + Gemini analysis)",
+        description="Unified vision + potentiostat analysis (capture + synthetic sensor + Vertex analysis)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -130,12 +130,28 @@ Examples:
     parser.add_argument(
         "--api-key",
         type=str,
-        help="Gemini API key (or set GOOGLE_API_KEY env var)"
+        help="Deprecated; API-key Gemini auth is no longer used"
     )
     parser.add_argument(
         "--model",
         type=str,
-        help="Gemini model ID (e.g., gemini-3-flash-preview)"
+        help="Vertex model ID (e.g., gemini-2.5-flash)"
+    )
+    parser.add_argument(
+        "--auth-mode",
+        type=str,
+        choices=["auto", "adc", "service_account", "disabled"],
+        help="Vertex auth mode override"
+    )
+    parser.add_argument(
+        "--project-id",
+        type=str,
+        help="Vertex project ID override"
+    )
+    parser.add_argument(
+        "--location",
+        type=str,
+        help="Vertex location override"
     )
     parser.add_argument(
         "--output",
@@ -182,14 +198,26 @@ Examples:
 
     # Initialize Gemini clients
     try:
-        vision_client = GeminiVisionClient(api_key=args.api_key, model_id=args.model)
-        potentiostat_client = PotentiostatGeminiClient(api_key=args.api_key, model_id=args.model)
+        vision_client = GeminiVisionClient(
+            api_key=args.api_key,
+            model_id=args.model,
+            auth_mode=args.auth_mode,
+            project_id=args.project_id,
+            location=args.location,
+        )
+        potentiostat_client = PotentiostatGeminiClient(
+            api_key=args.api_key,
+            model_id=args.model,
+            auth_mode=args.auth_mode,
+            project_id=args.project_id,
+            location=args.location,
+        )
     except ValueError as e:
         print(f"❌ {e}")
         sys.exit(1)
 
     # === STEP 3: VISION ANALYSIS ===
-    print("\n🔍 STEP 3: Analyzing image with Gemini (vision)...")
+    print("\n🔍 STEP 3: Analyzing image with Vertex AI (vision)...")
     vision_result = vision_client.analyze_image_file(captured_path)
     if "error" in vision_result:
         print(f"❌ Vision analysis failed: {vision_result['error']}")
@@ -197,7 +225,7 @@ Examples:
     print("✓ Vision analysis complete")
 
     # === STEP 4: POTENTIOSTAT ANALYSIS ===
-    print("\n🔍 STEP 4: Analyzing sensor data with Gemini (electrochemical)...")
+    print("\n🔍 STEP 4: Analyzing sensor data with Vertex AI (electrochemical)...")
     potentiostat_result = potentiostat_client.analyze_sensor_data(sensor_reading)
     if "error" in potentiostat_result:
         print(f"❌ Potentiostat analysis failed: {potentiostat_result['error']}")

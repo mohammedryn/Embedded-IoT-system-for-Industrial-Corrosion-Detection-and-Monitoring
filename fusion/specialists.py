@@ -84,7 +84,7 @@ class FinalInterpretationResponse(BaseModel):
 
 
 class ModelClient(Protocol):
-    def generate(self, *, model_id: str, prompt: str, timeout_seconds: float) -> str:
+    def generate_structured_text(self, *, model_id: str, prompt: str, timeout_seconds: float) -> str:
         """Return a JSON string from a model call."""
 
 
@@ -108,20 +108,17 @@ class CorrosionMemory:
 
 
 def load_ai_settings(project_root: str | Path) -> AISettings:
-    root = Path(project_root)
-    settings = yaml.safe_load((root / "config" / "settings.yaml").read_text(encoding="utf-8")) or {}
-    retry = yaml.safe_load((root / "config" / "retry_policy.yaml").read_text(encoding="utf-8")) or {}
+    from ai.runtime import load_ai_config
 
-    ai_cfg = settings.get("ai", {})
-    ai_retry = retry.get("retry", {}).get("ai_call", {})
+    config = load_ai_config(project_root)
 
     return AISettings(
-        primary_model_id=str(ai_cfg.get("primary_model_id", "gemini-3-flash-preview")),
-        fallback_model_id=str(ai_cfg.get("fallback_model_id", "gemini-3.1-pro-preview")),
-        response_mode=str(ai_cfg.get("response_mode", "json")),
-        max_attempts=int(ai_retry.get("max_attempts", 3)),
-        timeout_seconds=float(ai_retry.get("timeout_seconds", 8)),
-        backoff_seconds=float(ai_retry.get("backoff_seconds", 1)),
+        primary_model_id=config.primary_model_id,
+        fallback_model_id=config.fallback_model_id,
+        response_mode="json",
+        max_attempts=config.max_attempts,
+        timeout_seconds=config.sensor_timeout_seconds,
+        backoff_seconds=config.backoff_seconds,
     )
 
 
@@ -352,7 +349,7 @@ class SpecialistService:
         for attempt in range(1, attempts + 1):
             model_id = self.settings.primary_model_id if attempt < attempts else self.settings.fallback_model_id
             try:
-                raw = self.client.generate(
+                raw = self.client.generate_structured_text(
                     model_id=model_id,
                     prompt=prompt,
                     timeout_seconds=self.settings.timeout_seconds,

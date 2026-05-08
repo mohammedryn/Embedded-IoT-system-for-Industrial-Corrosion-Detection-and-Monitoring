@@ -1,20 +1,28 @@
-"""Potentiostat (electrochemical sensor) simulation and Gemini analysis client."""
+"""Potentiostat (electrochemical sensor) simulation and Vertex analysis client."""
 from __future__ import annotations
 
 import json
-import os
 import random
-from dataclasses import dataclass
+import sys
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from ai.providers.vertex import VertexAIProvider
+from ai.runtime import load_ai_config
+
 
 @dataclass
 class SensorReading:
     """Simulated potentiostat measurement."""
+
     timestamp: str
     cycle_id: str
     current_ma: float
@@ -23,7 +31,8 @@ class SensorReading:
 
 
 class PotentiostatAnalysis(BaseModel):
-    """Structured response from Gemini electrochemical analysis."""
+    """Structured response from electrochemical cloud analysis."""
+
     text_summary: str
     electrochemical_severity_0_to_10: float = Field(ge=0, le=10)
     status_band: str = Field(description="HEALTHY|WARNING|CRITICAL")
@@ -45,27 +54,18 @@ class SyntheticSensorGenerator:
         current_range: tuple[float, float] = (0.15, 0.50),
         rp_range: tuple[float, float] = (30000, 100000),
     ) -> SensorReading:
-        """
-        Generate a synthetic sensor reading.
-        
-        severity_mode: 'healthy' (high rp, low current), 'warning', 'critical'
-        """
         timestamp = datetime.now(timezone.utc).isoformat()
 
         if severity_mode == "healthy":
-            # High polarization resistance, low current
             rp_ohm = random.uniform(60000, 100000)
             current_ma = random.uniform(0.05, 0.20)
         elif severity_mode == "warning":
-            # Medium polarization resistance, medium current
             rp_ohm = random.uniform(30000, 60000)
             current_ma = random.uniform(0.20, 0.40)
         elif severity_mode == "critical":
-            # Low polarization resistance, high current
             rp_ohm = random.uniform(10000, 30000)
             current_ma = random.uniform(0.40, 1.00)
         else:
-            # Random within specified ranges
             rp_ohm = random.uniform(*rp_range)
             current_ma = random.uniform(*current_range)
 
@@ -78,51 +78,45 @@ class SyntheticSensorGenerator:
 
 
 class PotentiostatGeminiClient:
-    """Client for Gemini electrochemical analysis."""
+    """Compatibility wrapper that now uses Vertex AI instead of API-key Gemini."""
 
     def __init__(
         self,
         api_key: str | None = None,
         model_id: str | None = None,
         fallback_model_id: str | None = None,
-    ):
-        """Initialize with optional API key. Falls back to GOOGLE_API_KEY env var."""
-        import google.generativeai as genai
-
-        self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
-        if not self.api_key:
+        *,
+        auth_mode: str | None = None,
+        project_id: str | None = None,
+        location: str | None = None,
+    ) -> None:
+        if api_key:
             raise ValueError(
-                "GOOGLE_API_KEY not provided. Must set via:\n"
-                "  export GOOGLE_API_KEY='your-key-here'\n"
-                "or pass api_key parameter"
+                "API key-based Gemini access is deprecated for this project. "
+                "Use Vertex auth via ADC or GOOGLE_APPLICATION_CREDENTIALS."
             )
 
-        self.model_id = model_id or os.getenv("GEMINI_MODEL_ID") or "gemini-3-flash-preview"
-        self.fallback_model_id = fallback_model_id or os.getenv("GEMINI_FALLBACK_MODEL_ID") or "gemini-3.1-pro-preview"
-
-        genai.configure(api_key=self.api_key)
-
-    @staticmethod
-    def _strip_json_fence(response_text: str) -> str:
-        txt = response_text.strip()
-        if txt.startswith("```"):
-            parts = txt.split("```")
-            if len(parts) >= 2:
-                txt = parts[1]
-            if txt.startswith("json"):
-                txt = txt[4:]
-            txt = txt.strip()
-        return txt
-
-    def _models_to_try(self) -> list[str]:
-        models: list[str] = [self.model_id]
-        if self.fallback_model_id and self.fallback_model_id not in models:
-            models.append(self.fallback_model_id)
-        return models
+        config = load_ai_config(PROJECT_ROOT)
+        self.config = replace(
+            config,
+            primary_model_id=model_id or config.primary_model_id,
+            fallback_model_id=fallback_model_id or config.fallback_model_id,
+            auth_mode=auth_mode or config.auth_mode,
+            project_id=project_id if project_id is not None else config.project_id,
+            location=location or config.location,
+        )
+        self.provider = VertexAIProvider(config=self.config)
+        self.model_id = self.config.primary_model_id
+        self.fallback_model_id = self.config.fallback_model_id
 
     def analyze_sensor_data(self, sensor_reading: SensorReading) -> dict[str, Any]:
         """Analyze potentiostat sensor data and return structured analysis."""
-        import google.generativeai as genai
+        runtime = self.provider.describe_runtime()
+        if runtime.get("runtime_mode") != "vertex_expert":
+            return {
+                "error": "Vertex AI unavailable for electrochemical analysis",
+                "details": runtime,
+            }
 
         prompt = f"""You are an electrochemical corrosion specialist. Analyze this potentiostat measurement and return STRICT JSON only (no markdown, no prose):
 
@@ -151,36 +145,24 @@ Guidelines:
 - Be specific and quantifiable."""
 
         response_text = ""
-        last_error = ""
         try:
-            for model_id in self._models_to_try():
-                try:
-                    model = genai.GenerativeModel(model_id)
-                    response = model.generate_content(prompt)
-                    response_text = self._strip_json_fence(response.text)
-                    analysis_dict = json.loads(response_text)
-
-                    # Ensure output model_id reflects actual model used
-                    analysis_dict["model_id"] = model_id
-                    validated = PotentiostatAnalysis.model_validate(analysis_dict)
-                    return validated.model_dump()
-                except Exception as e:
-                    last_error = f"{model_id}: {e}"
-                    continue
-
+            response_text = self.provider.generate_structured_text(
+                prompt=prompt,
+                model_id=self.model_id,
+                timeout_seconds=self.config.sensor_timeout_seconds,
+            )
+            analysis_dict = json.loads(response_text)
+            analysis_dict["model_id"] = str(analysis_dict.get("model_id") or self.model_id)
+            validated = PotentiostatAnalysis.model_validate(analysis_dict)
+            return validated.model_dump()
+        except json.JSONDecodeError as exc:
             return {
-                "error": "Gemini API call failed for all configured models",
-                "details": last_error or "No model attempts were made",
-            }
-
-        except json.JSONDecodeError as e:
-            return {
-                "error": "Failed to parse Gemini response as JSON",
+                "error": "Failed to parse Vertex response as JSON",
                 "raw_response": response_text,
-                "details": str(e),
+                "details": str(exc),
             }
-        except Exception as e:
+        except Exception as exc:  # pylint: disable=broad-except
             return {
-                "error": f"Gemini API call failed: {str(e)}",
-                "details": str(e),
+                "error": f"Vertex electrochemical analysis failed: {exc}",
+                "details": str(exc),
             }
