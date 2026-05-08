@@ -3,41 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI System Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <title>CorrosionAI — Live Analysis</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="background-globes">
-        <div class="globe globe-1"></div>
-        <div class="globe globe-2"></div>
-        <div class="globe globe-3"></div>
+    <div class="bg-layer">
+        <div class="bg-orb orb-1"></div>
+        <div class="bg-orb orb-2"></div>
+        <div class="bg-orb orb-3"></div>
+        <div class="bg-grid"></div>
+        <div class="bg-noise"></div>
     </div>
 
     <div class="container">
         <header>
             <div class="header-left">
                 <div class="logo">
-                    <span class="logo-icon">ai</span>
-                    <h1>Corrosion<strong>Intelligence</strong></h1>
+                    <div class="logo-mark">
+                        <span class="logo-mark-text">AI</span>
+                        <div class="logo-mark-ring"></div>
+                    </div>
+                    <div class="logo-text">
+                        <h1>Corrosion<strong>Intelligence</strong></h1>
+                        <p class="subtitle">Multi-Sensor Remaining Life Prediction System</p>
+                    </div>
                 </div>
-                <p class="subtitle">Multi-Sensor Remaining Life Prediction System</p>
             </div>
             <div class="header-right">
-                <div class="info-badge">
-                    <span class="label">Cycle ID</span>
-                    <span class="value" id="cycle_id">--</span>
+                <div class="live-chip">
+                    <span class="live-dot"></span>
+                    <span class="live-label">LIVE</span>
                 </div>
                 <div class="info-badge">
-                    <span class="label">Timestamp</span>
-                    <span class="value" id="timestamp">--</span>
+                    <span class="label">Cycle</span>
+                    <span class="value mono" id="cycle_id">--</span>
+                </div>
+                <div class="info-badge">
+                    <span class="label">Time</span>
+                    <span class="value mono" id="timestamp">--</span>
                 </div>
             </div>
         </header>
 
         <nav class="tab-nav">
-            <button class="tab-btn active" data-tab="monitor">Monitor</button>
-            <button class="tab-btn" data-tab="lab-session">Lab Session</button>
+            <button class="tab-btn active" data-tab="monitor">
+                <span class="tab-icon">◉</span> Monitor
+            </button>
+            <button class="tab-btn" data-tab="lab-session">
+                <span class="tab-icon">⬡</span> Lab Session
+            </button>
         </nav>
 
         <!-- ─── MONITOR TAB ─── -->
@@ -48,40 +63,44 @@
 
             <div class="dashboard-grid">
                 <div class="card stat-card" id="card_sensor">
+                    <div class="card-inner-glow"></div>
                     <div class="card-header">
-                        <h3>Electrochemical Sensor</h3>
+                        <h3>Electrochemical</h3>
                         <div class="badge" id="sensor_status">HEALTHY</div>
                     </div>
                     <div class="stat-value">
-                        <h2 class="animate-value" id="rp_ohm">0</h2>
+                        <h2 class="animate-value mono-num" id="rp_ohm">0</h2>
                         <span class="unit">Ω Rp</span>
                     </div>
                     <div class="stat-sub">
-                        <span><strong id="current_ma">0</strong> mA Current</span>
+                        <span class="mono-sm"><strong id="current_ma">0</strong> mA</span>
+                        <span class="stat-sub-label">Current draw</span>
                     </div>
                 </div>
 
                 <div class="card stat-card" id="card_vision">
+                    <div class="card-inner-glow"></div>
                     <div class="card-header">
-                        <h3>Vision AI Engine</h3>
+                        <h3>Vision Engine</h3>
                         <div class="badge" id="vision_quality">FRESH</div>
                     </div>
                     <div class="stat-value">
-                        <h2 class="animate-value" id="vision_severity">0.0</h2>
-                        <span class="unit">/ 10 Sev</span>
+                        <h2 class="animate-value mono-num" id="vision_severity">0.0</h2>
+                        <span class="unit">/ 10</span>
                     </div>
-                    <div class="stat-sub" id="vision_flags_container">
-                        <span class="text-truncate">Quality: <strong id="vision_flags">None</strong></span>
+                    <div class="stat-sub">
+                        <span class="text-truncate">Flags: <strong id="vision_flags">None</strong></span>
                     </div>
                 </div>
 
                 <div class="card stat-card glow-card" id="card_confidence">
+                    <div class="card-inner-glow"></div>
                     <div class="card-header">
-                        <h3>Fused AI Confidence</h3>
+                        <h3>AI Confidence</h3>
                         <div class="pulse-indicator" id="confidence_pulse"></div>
                     </div>
                     <div class="stat-value">
-                        <h2 class="animate-value" id="confidence_percent">0</h2>
+                        <h2 class="animate-value mono-num" id="confidence_percent">0</h2>
                         <span class="unit">%</span>
                     </div>
                     <div class="stat-sub">
@@ -92,12 +111,13 @@
                 </div>
 
                 <div class="card stat-card highlight" id="card_rul">
+                    <div class="card-inner-glow"></div>
                     <div class="card-header">
                         <h3>RUL Prediction</h3>
+                        <span class="rul-label-chip">Days Remaining</span>
                     </div>
                     <div class="stat-value">
-                        <h2 class="animate-value emphasis" id="rul_days">0.0</h2>
-                        <span class="unit">Days</span>
+                        <h2 class="animate-value mono-num emphasis" id="rul_days">0.0</h2>
                     </div>
                     <div class="stat-sub">
                         <span>Severity: <strong id="fused_severity">0.0</strong> / 10</span>
@@ -106,9 +126,9 @@
             </div>
 
             <div class="controls-panel card">
-                <button class="btn btn-outlined" id="btn_pause">Pause Demo</button>
-                <button class="btn btn-outlined" id="btn_resume">Resume</button>
-                <button class="btn btn-primary" id="btn_recapture">Recapture Image</button>
+                <button class="btn btn-ghost" id="btn_pause">Pause</button>
+                <button class="btn btn-ghost" id="btn_resume">Resume</button>
+                <button class="btn btn-outlined" id="btn_recapture">Recapture Image</button>
                 <button class="btn btn-primary" id="btn_recompute">Force Recompute</button>
             </div>
         </div>
@@ -116,20 +136,19 @@
         <!-- ─── LAB SESSION TAB ─── -->
         <div class="tab-panel hidden" id="tab-lab-session">
 
-            <!-- Horizontal Stepper -->
             <div class="stepper">
                 <div class="stepper-step active" id="stepper-1">
-                    <div class="step-circle">1</div>
+                    <div class="step-circle"><span>1</span></div>
                     <div class="step-label">Capture</div>
                 </div>
                 <div class="step-connector" id="connector-1-2"></div>
                 <div class="stepper-step" id="stepper-2">
-                    <div class="step-circle">2</div>
+                    <div class="step-circle"><span>2</span></div>
                     <div class="step-label">Measure</div>
                 </div>
                 <div class="step-connector" id="connector-2-3"></div>
                 <div class="stepper-step" id="stepper-3">
-                    <div class="step-circle">3</div>
+                    <div class="step-circle"><span>3</span></div>
                     <div class="step-label">Analyze</div>
                 </div>
             </div>
@@ -138,31 +157,35 @@
             <div class="step-panel" id="step-panel-1">
                 <div class="card step-card">
                     <div class="step-card-header">
-                        <h3>Step 1 — Surface Photos</h3>
-                        <span class="step-hint">Capture 3–5 photos from different angles before immersion</span>
+                        <div class="step-number-tag">01</div>
+                        <div>
+                            <h3>Surface Photos</h3>
+                            <span class="step-hint">Capture 3–5 photos from different angles before immersion</span>
+                        </div>
                     </div>
 
                     <div class="capture-layout">
                         <div class="capture-preview-wrap">
                             <div class="capture-preview capture-preview-launcher" id="capture-preview" role="button" tabindex="0" aria-label="Open camera preview window">
-                                <span class="capture-placeholder">Open live preview window</span>
+                                <div class="capture-placeholder-inner">
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                                    <span class="capture-placeholder">Open live preview</span>
+                                </div>
                             </div>
-                            <p class="capture-preview-status" id="capture-preview-status">Click the preview box to open the live camera window</p>
+                            <p class="capture-preview-status" id="capture-preview-status">Click to open camera window</p>
                         </div>
                         <div class="photo-strip-wrap">
-                            <div class="photo-strip" id="photo-strip">
-                                <!-- Thumbnails injected here -->
-                            </div>
-                            <p class="photo-count-label" id="photo-count-label">0 photos</p>
+                            <div class="photo-strip" id="photo-strip"></div>
+                            <p class="photo-count-label" id="photo-count-label">0 photos captured</p>
                         </div>
                     </div>
 
                     <div class="step-actions">
-                        <button class="btn btn-outlined" id="btn-open-preview">Open Preview Window</button>
+                        <button class="btn btn-outlined" id="btn-open-preview">Open Preview</button>
                         <button class="btn btn-primary" id="btn-capture">Capture Photo</button>
-                        <button class="btn btn-outlined" id="btn-clear-photos">Clear All</button>
+                        <button class="btn btn-ghost" id="btn-clear-photos">Clear All</button>
                         <span class="step-spacer"></span>
-                        <button class="btn btn-primary" id="btn-step1-next" disabled>Next →</button>
+                        <button class="btn btn-primary btn-next" id="btn-step1-next" disabled>Next →</button>
                     </div>
                     <p class="step-error hidden" id="capture-error"></p>
                 </div>
@@ -172,11 +195,13 @@
             <div class="step-panel hidden" id="step-panel-2">
                 <div class="card step-card">
                     <div class="step-card-header">
-                        <h3>Step 2 — Electrochemical Readings</h3>
-                        <span class="step-hint">Submerge the sample and collect Rp readings from Teensy</span>
+                        <div class="step-number-tag">02</div>
+                        <div>
+                            <h3>Electrochemical Readings</h3>
+                            <span class="step-hint">Submerge sample and collect Rp readings from Teensy</span>
+                        </div>
                     </div>
 
-                    <!-- Connection status -->
                     <div class="connection-bar">
                         <div class="conn-status" id="conn-status">
                             <span class="conn-dot" id="conn-dot"></span>
@@ -186,35 +211,33 @@
                         <button class="btn btn-outlined btn-sm hidden" id="btn-serial-disconnect">Disconnect</button>
                     </div>
 
-                    <!-- Live Rp reading -->
                     <div class="live-reading-card" id="live-reading-card">
                         <div class="live-reading-row">
                             <span class="live-label">Rp</span>
-                            <span class="live-value" id="live-rp">—</span>
+                            <span class="live-value mono-num" id="live-rp">—</span>
                             <span class="live-unit">Ω</span>
                             <div class="badge live-badge" id="live-status-badge">—</div>
                         </div>
                         <div class="live-reading-row">
                             <span class="live-label">I</span>
-                            <span class="live-value live-value-sm" id="live-current">—</span>
+                            <span class="live-value live-value-sm mono-num" id="live-current">—</span>
                             <span class="live-unit">µA</span>
                             <span class="live-label" style="margin-left:1.5rem">Asym</span>
-                            <span class="live-value live-value-sm" id="live-asym">—</span>
+                            <span class="live-value live-value-sm mono-num" id="live-asym">—</span>
                             <span class="live-unit">%</span>
                         </div>
                     </div>
 
-                    <!-- Readings progress -->
                     <div class="readings-progress">
                         <div class="readings-target-row">
-                            <label class="readings-label">Target readings:</label>
+                            <label class="readings-label">Target</label>
                             <select class="readings-select" id="readings-target">
-                                <option value="5">5</option>
-                                <option value="10" selected>10</option>
-                                <option value="15">15</option>
-                                <option value="20">20</option>
+                                <option value="5">5 readings</option>
+                                <option value="10" selected>10 readings</option>
+                                <option value="15">15 readings</option>
+                                <option value="20">20 readings</option>
                             </select>
-                            <span class="readings-count" id="readings-count">0 collected</span>
+                            <span class="readings-count mono-sm" id="readings-count">0 collected</span>
                         </div>
                         <div class="progress-bar-bg">
                             <div class="progress-bar-fill" id="readings-progress-bar"></div>
@@ -222,11 +245,11 @@
                     </div>
 
                     <div class="step-actions">
-                        <button class="btn btn-outlined" id="btn-step2-back">← Back</button>
+                        <button class="btn btn-ghost" id="btn-step2-back">← Back</button>
                         <button class="btn btn-primary" id="btn-start-collecting" disabled>▶ Start Collecting</button>
                         <button class="btn btn-outlined hidden" id="btn-stop-collecting">■ Stop</button>
                         <span class="step-spacer"></span>
-                        <button class="btn btn-primary" id="btn-step2-next" disabled>Next →</button>
+                        <button class="btn btn-primary btn-next" id="btn-step2-next" disabled>Next →</button>
                     </div>
                 </div>
             </div>
@@ -235,17 +258,22 @@
             <div class="step-panel hidden" id="step-panel-3">
                 <div class="card step-card">
                     <div class="step-card-header">
-                        <h3>Step 3 — AI Analysis</h3>
-                        <span class="step-hint">Run vision + electrochemical fusion analysis</span>
+                        <div class="step-number-tag">03</div>
+                        <div>
+                            <h3>AI Analysis</h3>
+                            <span class="step-hint">Vertex AI fusion of electrochemical + vision evidence</span>
+                        </div>
                     </div>
 
                     <div class="analyze-launch" id="analyze-launch">
-                        <button class="btn btn-primary btn-lg" id="btn-analyze">Run Full AI Analysis</button>
+                        <button class="btn btn-primary btn-analyze" id="btn-analyze">
+                            <span class="btn-analyze-icon">⬡</span>
+                            Run Full AI Analysis
+                        </button>
                         <p class="analyze-summary" id="analyze-summary"></p>
                         <p class="analyze-runtime" id="analyze-runtime-status">AI mode: unknown</p>
                     </div>
 
-                    <!-- Progress during analysis -->
                     <div class="analyze-progress hidden" id="analyze-progress">
                         <div class="progress-step" id="prog-sensor">
                             <span class="prog-spinner"></span>
@@ -261,22 +289,23 @@
                         </div>
                     </div>
 
-                    <!-- Result card -->
                     <div class="result-card hidden" id="result-card">
                         <div class="result-row">
                             <div class="result-metric">
                                 <span class="result-label">Severity</span>
-                                <span class="result-big" id="res-severity">—</span>
+                                <span class="result-big mono-num" id="res-severity">—</span>
                                 <span class="result-unit">/ 10</span>
                             </div>
+                            <div class="result-divider"></div>
                             <div class="result-metric">
                                 <span class="result-label">RUL</span>
-                                <span class="result-big" id="res-rul">—</span>
+                                <span class="result-big mono-num" id="res-rul">—</span>
                                 <span class="result-unit">days</span>
                             </div>
+                            <div class="result-divider"></div>
                             <div class="result-metric">
                                 <span class="result-label">Confidence</span>
-                                <span class="result-big" id="res-confidence">—</span>
+                                <span class="result-big mono-num" id="res-confidence">—</span>
                                 <span class="result-unit">%</span>
                             </div>
                         </div>
@@ -295,7 +324,7 @@
                     <p class="step-error hidden" id="analyze-error"></p>
 
                     <div class="step-actions">
-                        <button class="btn btn-outlined" id="btn-step3-back">← Back</button>
+                        <button class="btn btn-ghost" id="btn-step3-back">← Back</button>
                         <span class="step-spacer"></span>
                         <button class="btn btn-outlined" id="btn-new-session">New Session</button>
                     </div>
@@ -303,10 +332,9 @@
             </div>
 
         </div>
-        <!-- end lab-session tab -->
 
         <footer class="disclaimer">
-            * Educational / Laboratory Prototype. Not for industrial safety-critical use.
+            ⚠ Educational / Laboratory Prototype — Not for industrial safety-critical use
         </footer>
     </div>
 
