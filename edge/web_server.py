@@ -442,7 +442,7 @@ Context JSON:
 """
 
 
-def _ai_vision_payload_from_photos(photos: list, cycle_id: str, provider=None) -> dict:
+def _ai_vision_payload_from_photos(photos: list, cycle_id: str, provider=None, timeout_seconds: float = 15.0) -> dict:
     raw, source_photo = _best_vision_observation(photos, cycle_id)
     if raw is None:
         return _no_vision_payload(cycle_id)
@@ -465,7 +465,7 @@ def _ai_vision_payload_from_photos(photos: list, cycle_id: str, provider=None) -
             image_path=source_photo["path"],
             prompt=_build_cloud_vision_prompt(context),
             model_id=str(runtime.get("primary_model_id", runtime.get("fallback_model_id", "gemini-2.5-flash"))),
-            timeout_seconds=10.0,
+            timeout_seconds=timeout_seconds,
         )
         gemini_result = json.loads(response_text)
         if not isinstance(gemini_result, dict):
@@ -1368,6 +1368,7 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         try:
             body = self._read_json_body()
         except Exception:
+            import traceback as _tb; _tb.print_exc()
             body = {}
 
         min_readings = max(1, int(body.get("min_readings", 5)))
@@ -1441,7 +1442,7 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
                 )
 
             def _vision_fn() -> dict:
-                ai_vision_input = _ai_vision_payload_from_photos(photos, cycle_id, provider)
+                ai_vision_input = _ai_vision_payload_from_photos(photos, cycle_id, provider, timeout_seconds=ai_config.sensor_timeout_seconds)
                 if ai_vision_input.get("fallback_reason") == "no_photos":
                     return ai_vision_input
                 return svc.run_vision(
@@ -1469,12 +1470,12 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
                 vf = pool.submit(_vision_fn)
                 try:
                     sensor_payload = sf.result(timeout=max(ai_config.sensor_timeout_seconds, 1.0) + 2.0)
-                except concurrent.futures.TimeoutError:
+                except (concurrent.futures.TimeoutError, TimeoutError):
                     sf.cancel()
                     sensor_payload = _mark_payload_degraded(local_sensor_payload, "sensor_specialist_timeout")
                 try:
                     vision_payload = vf.result(timeout=max(ai_config.vision_timeout_seconds, 1.0) + 2.0)
-                except concurrent.futures.TimeoutError:
+                except (concurrent.futures.TimeoutError, TimeoutError):
                     vf.cancel()
                     vision_payload = _mark_payload_degraded(local_vision_payload, "vision_specialist_timeout")
             timing_sensor_ms = max(timing_sensor_ms, (time.time() - t_spec) * 1000)
