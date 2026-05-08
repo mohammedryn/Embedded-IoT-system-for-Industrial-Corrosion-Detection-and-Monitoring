@@ -378,7 +378,8 @@ class VisionPipeline:
         for h, s, v in hsv.getdata():
             total += 1
             deg = h * 360.0 / 255.0
-            if (8 <= deg <= 38) and s >= 65 and v >= 35:
+            # Broader hue (6-45°) + lower saturation floor (45) to catch matte/dark rust
+            if (6 <= deg <= 45) and s >= 45 and v >= 25:
                 rust += 1
         pct = (rust / max(1, total)) * 100.0
         if pct < 5:

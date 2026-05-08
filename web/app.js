@@ -187,6 +187,7 @@ const LabSession = (() => {
     let serialConnected = false;
     let analyzeRunning = false;
     let previewWindow = null;
+    let connectedAtSeq = 0; // serial seq at time of last Connect — avoids replaying stale frames
 
     function init() {
         // Step navigation
@@ -379,6 +380,14 @@ const LabSession = (() => {
             const res = await fetch('/api/session/serial/connect', { method: 'POST' });
             const data = await res.json();
             serialConnected = data.ok && data.serial_connected;
+            if (serialConnected) {
+                // Record current seq so startCollecting only streams fresh frames
+                try {
+                    const rr = await fetch('/api/session/readings');
+                    const rd = await rr.json();
+                    connectedAtSeq = rd.latest_serial_seq || 0;
+                } catch (e) { connectedAtSeq = 0; }
+            }
             setConnStatus(serialConnected);
         } catch (e) {
             setConnStatus(false);
@@ -419,7 +428,7 @@ const LabSession = (() => {
         }
     }
 
-    function startCollecting() {
+    async function startCollecting() {
         if (collecting) return;
         collecting = true;
         readings = [];
@@ -428,7 +437,15 @@ const LabSession = (() => {
         document.getElementById('btn-start-collecting').classList.add('hidden');
         document.getElementById('btn-stop-collecting').classList.remove('hidden');
 
-        let lastSeq = 0;
+        // Clear stale server-side readings and get the current serial seq so we
+        // only collect frames that arrive from this point forward.
+        let lastSeq = connectedAtSeq;
+        try {
+            const cr = await fetch('/api/session/readings/clear', { method: 'POST' });
+            const cd = await cr.json();
+            if (cd.latest_serial_seq != null) lastSeq = cd.latest_serial_seq;
+        } catch (e) { /* fall back to connectedAtSeq */ }
+
         const target = parseInt(document.getElementById('readings-target').value, 10);
 
         sseSource = new EventSource('/api/session/readings/stream?last_seq=' + lastSeq);

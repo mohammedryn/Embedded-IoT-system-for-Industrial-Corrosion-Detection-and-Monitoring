@@ -3,10 +3,10 @@ camera:
   still_width: 1920
   still_height: 1080
   roi:
-    x: 0.30
-    y: 0.20
-    w: 0.40
-    h: 0.60
+    x: 0.05
+    y: 0.05
+    w: 0.90
+    h: 0.90
   exposure_mode: manual
   exposure_time_us: 12000
   analogue_gain: 1.5

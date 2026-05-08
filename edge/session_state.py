@@ -108,5 +108,9 @@ class SessionStateManager:
         with self._lock:
             return [dict(item) for item in self._readings]
 
+    def clear_readings(self) -> None:
+        with self._lock:
+            self._readings = deque(maxlen=self._max_readings)
+
 
 session_state = SessionStateManager()

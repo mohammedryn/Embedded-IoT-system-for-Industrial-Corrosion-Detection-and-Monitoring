@@ -414,20 +414,27 @@ def _map_gemini_image_result_to_vision_payload(
 
 
 def _build_cloud_vision_prompt(context: dict) -> str:
+    local_note = context.get("local_heuristic_note", {})
+    local_rust = local_note.get("rust_coverage_pct", "unknown")
     return f"""You are a corrosion-vision specialist reviewing a steel or stainless-steel surface image.
 Return STRICT JSON only (no markdown, no prose, no code fences).
 
-Use cautious corrosion language and preserve the local visual summary when uncertain.
+IMPORTANT — TRUST YOUR OWN VISUAL ASSESSMENT ABOVE ALL ELSE.
+The local_heuristic_note in the context below comes from a simple HSV pixel-counting algorithm
+that frequently under-estimates rust (especially dark, matte, or partially shadowed corrosion).
+It reported rust_coverage_pct={local_rust} but this number is UNRELIABLE.
+Look at the actual image and report what YOU see. If the surface is heavily corroded, say so.
+Do NOT defer to the heuristic if it conflicts with what is visually obvious.
 
 Return exactly this schema:
 {{
-  "text_summary": "2-4 sentence technical description of what the surface visually suggests",
+  "text_summary": "2-4 sentence technical description of what the surface visually shows",
   "rust_coverage_estimate": "none|light|moderate|heavy",
   "surface_condition": "uniform|pitted|localized|mixed|other",
   "severity_0_to_10": 3.5,
   "confidence_0_to_1": 0.85,
   "pitting_observed": false,
-  "pitting_evidence": "brief explanation",
+  "pitting_evidence": "brief explanation of visible pitting or lack thereof",
   "suspected_damage_modes": ["mode1", "mode2"],
   "suspicious_regions": ["region1", "region2"],
   "corrosion_spot_count_estimate": "none|few|several|many|unknown",
@@ -457,7 +464,8 @@ def _ai_vision_payload_from_photos(photos: list, cycle_id: str, provider=None, t
         context = {
             "cycle_id": cycle_id,
             "project_mode": "corrosion_lab_surface_assessment",
-            "local_vision_summary": raw,
+            "local_heuristic_note": raw,
+            "local_heuristic_warning": "This heuristic frequently under-reports rust. Trust your own visual assessment.",
             "photo_count": len(photos),
             "research_hint": "Interpret chloride-exposed steel or stainless steel cautiously with respect to localized attack.",
         }
@@ -945,6 +953,9 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         if route == "/api/session/analyze":
             self._session_analyze()
             return
+        if route == "/api/session/readings/clear":
+            self._session_readings_clear()
+            return
 
         self.send_error(404, "Not Found")
 
@@ -1083,6 +1094,8 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
     def _session_readings(self):
         readings = session_state.readings_snapshot()
         latest = readings[-1] if readings else None
+        frames = serial_reader.snapshot()
+        latest_serial_seq = frames[-1].seq if frames else 0
         self._send_json(
             200,
             {
@@ -1091,9 +1104,16 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
                 "serial_connected": serial_reader.is_connected(),
                 "count": len(readings),
                 "latest": latest,
+                "latest_serial_seq": latest_serial_seq,
                 "readings": readings,
             },
         )
+
+    def _session_readings_clear(self):
+        session_state.clear_readings()
+        frames = serial_reader.snapshot()
+        latest_serial_seq = frames[-1].seq if frames else 0
+        self._send_json(200, {"ok": True, "latest_serial_seq": latest_serial_seq})
 
     def _session_readings_stream(self, query_string):
         qs = parse_qs(query_string, keep_blank_values=False)
