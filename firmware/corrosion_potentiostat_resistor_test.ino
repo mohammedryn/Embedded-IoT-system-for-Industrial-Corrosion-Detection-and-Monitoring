@@ -15,7 +15,7 @@
  * - Stage 2 (real electrodes, 3-op-amp): connect ADS1115 A1 to Vmid and set
  *   DIFFERENTIAL_ADC 1 below for cleaner AC-only readings.
  *
- * Serial commands:
+ * Serial commands:=
  * - help
  * - once
  * - auto on | auto off
