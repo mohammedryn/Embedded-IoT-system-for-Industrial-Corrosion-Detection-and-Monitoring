@@ -21,6 +21,7 @@ def _config(**overrides: object) -> AIConfig:
         sensor_timeout_seconds=8.0,
         vision_timeout_seconds=10.0,
         final_report_timeout_seconds=7.0,
+        ai_call_timeout_seconds=8.0,
         max_attempts=2,
         backoff_seconds=1.0,
         circuit_breaker_failures=3,

@@ -61,6 +61,19 @@ def test_session_new_endpoint(running_server):
     assert payload["session_id"]
 
 
+def test_session_config_exposes_analysis_timeouts(running_server):
+    host, port, _ = running_server
+    status, _, raw = _request_raw("GET", host, port, "/api/session/config")
+
+    assert status == 200
+    payload = json.loads(raw.decode("utf-8"))
+    assert payload["ok"] is True
+    assert payload["analysis_browser_timeout_seconds"] >= 1
+    assert payload["sensor_timeout_seconds"] >= 1
+    assert payload["vision_timeout_seconds"] >= 1
+    assert payload["final_report_timeout_seconds"] >= 1
+
+
 def test_serial_connect_disconnect_endpoints(running_server):
     host, port, monkeypatch = running_server
 
@@ -531,6 +544,27 @@ def test_analyze_uses_specialist_service_when_set(running_server):
                 "uncertainty_drivers": ["none"], "quality_flags": [],
                 "degraded_mode": False, "stale": False, "fallback_reason": "",
                 "model_id": "gemini-3-flash-preview", "schema_version": "c05-vision-v1",
+            }
+
+        def run_final_interpretation(self, *, cycle_id, orchestrator_input):
+            return {
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "cycle_id": cycle_id,
+                "headline": "Specialist report",
+                "overall_condition": "stable",
+                "executive_summary": "Specialist final report returned successfully.",
+                "electrochemical_assessment": ["sensor specialist ok"],
+                "vision_assessment": ["vision specialist ok"],
+                "cross_modal_assessment": ["fusion ok"],
+                "limitations": ["mocked service"],
+                "recommendations": ["continue monitoring"],
+                "confidence_0_to_1": orchestrator_input["fused"]["confidence_0_to_1"],
+                "source_ids": ["metrohm_an_cor_003_2025"],
+                "degraded_mode": False,
+                "stale": False,
+                "fallback_reason": "",
+                "model_id": "gemini-3-flash-preview",
+                "schema_version": "c05-final-v1",
             }
 
     class _FakeFS:

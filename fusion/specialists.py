@@ -117,7 +117,7 @@ def load_ai_settings(project_root: str | Path) -> AISettings:
         fallback_model_id=config.fallback_model_id,
         response_mode="json",
         max_attempts=config.max_attempts,
-        timeout_seconds=config.sensor_timeout_seconds,
+        timeout_seconds=config.ai_call_timeout_seconds,
         backoff_seconds=config.backoff_seconds,
     )
 

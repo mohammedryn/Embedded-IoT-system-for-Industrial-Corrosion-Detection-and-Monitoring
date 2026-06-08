@@ -21,6 +21,7 @@ class AIConfig:
     sensor_timeout_seconds: float
     vision_timeout_seconds: float
     final_report_timeout_seconds: float
+    ai_call_timeout_seconds: float
     max_attempts: int
     backoff_seconds: float
     circuit_breaker_failures: int
@@ -58,6 +59,7 @@ def load_ai_config(project_root: str | Path) -> AIConfig:
         sensor_timeout_seconds=float(ai_cfg.get("sensor_timeout_seconds", 8.0)),
         vision_timeout_seconds=float(ai_cfg.get("vision_timeout_seconds", 10.0)),
         final_report_timeout_seconds=float(ai_cfg.get("final_report_timeout_seconds", 7.0)),
+        ai_call_timeout_seconds=float(ai_call.get("timeout_seconds", 8.0)),
         max_attempts=int(ai_call.get("max_attempts", 2)),
         backoff_seconds=float(ai_call.get("backoff_seconds", 1.0)),
         circuit_breaker_failures=int(breaker_cfg.get("failures", 3)),

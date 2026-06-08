@@ -68,6 +68,7 @@ class TestAIRuntime(unittest.TestCase):
                 sensor_timeout_seconds=8.0,
                 vision_timeout_seconds=10.0,
                 final_report_timeout_seconds=7.0,
+                ai_call_timeout_seconds=6.0,
                 max_attempts=2,
                 backoff_seconds=1.0,
                 circuit_breaker_failures=4,
@@ -90,6 +91,7 @@ class TestAIRuntime(unittest.TestCase):
         self.assertTrue(config.enable_cloud_vision)
         self.assertTrue(config.enable_cloud_orchestrator)
         self.assertGreater(config.browser_timeout_seconds, config.final_report_timeout_seconds)
+        self.assertEqual(config.ai_call_timeout_seconds, 8.0)
 
 
 if __name__ == "__main__":

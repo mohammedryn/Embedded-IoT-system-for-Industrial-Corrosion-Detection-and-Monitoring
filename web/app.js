@@ -186,10 +186,13 @@ const LabSession = (() => {
     let collecting = false;
     let serialConnected = false;
     let analyzeRunning = false;
+    let analysisTimeoutSeconds = 120;
     let previewWindow = null;
     let connectedAtSeq = 0; // serial seq at time of last Connect — avoids replaying stale frames
 
     function init() {
+        loadSessionConfig();
+
         // Step navigation
         document.getElementById('btn-step1-next').addEventListener('click', () => goToStep(2));
         document.getElementById('btn-step2-back').addEventListener('click', () => goToStep(1));
@@ -225,6 +228,20 @@ const LabSession = (() => {
 
         // Initialize new server-side session
         fetch('/api/session/new', { method: 'POST' }).then(() => syncSessionPhotos()).catch(() => {});
+    }
+
+    async function loadSessionConfig() {
+        try {
+            const res = await fetch('/api/session/config');
+            if (!res.ok) return;
+            const data = await res.json();
+            const configuredSeconds = Number(data.analysis_browser_timeout_seconds);
+            if (Number.isFinite(configuredSeconds) && configuredSeconds > 0) {
+                analysisTimeoutSeconds = configuredSeconds;
+            }
+        } catch (e) {
+            console.warn('Session config unavailable:', e);
+        }
     }
 
     // ─── STEP NAVIGATION ────────────────────────────────────────────
@@ -521,12 +538,15 @@ const LabSession = (() => {
             el.textContent = 'AI mode: unknown';
             return;
         }
-        const modeLabel = runtime.mode === 'gemini_specialists'
-            ? 'Gemini specialists'
-            : 'Local heuristic fallback';
-        const keyLabel = runtime.api_key_present ? 'API key present' : 'API key missing';
+        const modeLabels = {
+            vertex_expert: 'Vertex specialists',
+            vertex_degraded: 'Vertex specialists (degraded)',
+            local_heuristic: 'Local heuristic fallback',
+        };
+        const modeLabel = modeLabels[runtime.mode] || 'AI runtime unknown';
+        const authLabel = runtime.cloud_enabled ? `auth: ${runtime.auth_source}` : `auth unavailable: ${runtime.auth_source}`;
         const details = runtime.message ? ' - ' + runtime.message : '';
-        el.textContent = 'AI mode: ' + modeLabel + ' (' + keyLabel + ')' + details;
+        el.textContent = 'AI mode: ' + modeLabel + ' (' + authLabel + ')' + details;
     }
 
     async function runAnalysis() {
@@ -554,7 +574,7 @@ const LabSession = (() => {
         try {
             const minReadings = parseInt(document.getElementById('readings-target').value, 10);
             const controller = new AbortController();
-            const timeoutMs = 90000;
+            const timeoutMs = Math.max(1, analysisTimeoutSeconds) * 1000;
             timeoutId = setTimeout(() => controller.abort(), timeoutMs);
             const res = await fetch('/api/session/analyze', {
                 method: 'POST',
@@ -577,7 +597,7 @@ const LabSession = (() => {
             renderResult(data);
         } catch (e) {
             if (e && e.name === 'AbortError') {
-                showError(errEl, 'Analysis timed out after 90s. The app will fall back when Gemini is slow, but this run still exceeded the browser wait window.');
+                showError(errEl, `Analysis timed out after ${Math.round(Math.max(1, analysisTimeoutSeconds))}s. The app will fall back when Gemini is slow, but this run still exceeded the browser wait window.`);
             } else {
                 showError(errEl, 'Network error: ' + e.message);
             }

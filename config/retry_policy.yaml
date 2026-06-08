@@ -7,7 +7,7 @@ retry:
     backoff_seconds: 0.5
   ai_call:
     max_attempts: 2
-    timeout_seconds: 8
+    timeout_seconds: 12
     backoff_seconds: 1
   ai_circuit_breaker:
     failures: 3

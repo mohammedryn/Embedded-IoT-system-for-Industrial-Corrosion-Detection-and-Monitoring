@@ -274,6 +274,33 @@ def _analysis_runtime_meta(svc) -> dict:
     }
 
 
+def _specialist_wait_seconds(ai_config, route_timeout_seconds: float) -> float:
+    """Outer wait budget for a specialist call.
+
+    SpecialistService retries up to ``max_attempts`` times, each bounded by
+    ``ai_call_timeout_seconds`` plus a backoff sleep between attempts. The
+    web server's wait must cover that full internal budget — otherwise it
+    cancels the specialist call (and its graceful internal stale-fallback)
+    before SpecialistService can finish, forcing a degraded result even when
+    Vertex would have answered in time.
+    """
+    retry_budget = ai_config.max_attempts * (ai_config.ai_call_timeout_seconds + ai_config.backoff_seconds)
+    return max(route_timeout_seconds, retry_budget) + 2.0
+
+
+def _analysis_config_payload() -> dict:
+    from ai.runtime import load_ai_config
+
+    config = load_ai_config(PROJECT_ROOT)
+    return {
+        "ok": True,
+        "analysis_browser_timeout_seconds": max(1.0, float(config.browser_timeout_seconds)),
+        "sensor_timeout_seconds": max(1.0, float(config.sensor_timeout_seconds)),
+        "vision_timeout_seconds": max(1.0, float(config.vision_timeout_seconds)),
+        "final_report_timeout_seconds": max(1.0, float(config.final_report_timeout_seconds)),
+    }
+
+
 def _ensure_camera_preview_worker():
     _camera_preview_worker.start()
 
@@ -907,6 +934,9 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
         if route == "/api/session/readings":
             self._session_readings()
             return
+        if route == "/api/session/config":
+            self._send_json(200, _analysis_config_payload())
+            return
         if route == "/api/session/readings/stream":
             self._session_readings_stream(parsed.query)
             return
@@ -994,9 +1024,7 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
             + b"Content-Type: image/jpeg\r\n"
             + f"Content-Length: {len(image_bytes)}\r\n\r\n".encode("utf-8")
         )
-        self.wfile.write(header)
-        self.wfile.write(image_bytes)
-        self.wfile.write(b"\r\n")
+        self.wfile.write(header + image_bytes + b"\r\n")
 
     def _session_camera_stream(self):
         _ensure_camera_preview_worker()
@@ -1462,7 +1490,7 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
                 )
 
             def _vision_fn() -> dict:
-                ai_vision_input = _ai_vision_payload_from_photos(photos, cycle_id, provider, timeout_seconds=ai_config.sensor_timeout_seconds)
+                ai_vision_input = _ai_vision_payload_from_photos(photos, cycle_id, provider, timeout_seconds=ai_config.vision_timeout_seconds)
                 if ai_vision_input.get("fallback_reason") == "no_photos":
                     return ai_vision_input
                 return svc.run_vision(
@@ -1485,19 +1513,22 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
                 )
 
             t_spec = time.time()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-                sf = pool.submit(_sensor_fn)
-                vf = pool.submit(_vision_fn)
+            pool = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+            sf = pool.submit(_sensor_fn)
+            vf = pool.submit(_vision_fn)
+            try:
                 try:
-                    sensor_payload = sf.result(timeout=max(ai_config.sensor_timeout_seconds, 1.0) + 2.0)
+                    sensor_payload = sf.result(timeout=_specialist_wait_seconds(ai_config, ai_config.sensor_timeout_seconds))
                 except (concurrent.futures.TimeoutError, TimeoutError):
                     sf.cancel()
                     sensor_payload = _mark_payload_degraded(local_sensor_payload, "sensor_specialist_timeout")
                 try:
-                    vision_payload = vf.result(timeout=max(ai_config.vision_timeout_seconds, 1.0) + 2.0)
+                    vision_payload = vf.result(timeout=_specialist_wait_seconds(ai_config, ai_config.vision_timeout_seconds))
                 except (concurrent.futures.TimeoutError, TimeoutError):
                     vf.cancel()
                     vision_payload = _mark_payload_degraded(local_vision_payload, "vision_specialist_timeout")
+            finally:
+                pool.shutdown(wait=False, cancel_futures=True)
             timing_sensor_ms = max(timing_sensor_ms, (time.time() - t_spec) * 1000)
             timing_vision_ms = max(timing_vision_ms, (time.time() - t_spec) * 1000)
 
@@ -1534,9 +1565,15 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
                         },
                     )
 
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                    ff = pool.submit(_final_report_fn)
-                    ai_report = ff.result(timeout=max(ai_config.final_report_timeout_seconds, 1.0) + 1.0)
+                pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                ff = pool.submit(_final_report_fn)
+                try:
+                    ai_report = ff.result(timeout=_specialist_wait_seconds(ai_config, ai_config.final_report_timeout_seconds))
+                except (concurrent.futures.TimeoutError, TimeoutError):
+                    ff.cancel()
+                    raise TimeoutError("final_report_specialist_timeout")
+                finally:
+                    pool.shutdown(wait=False, cancel_futures=True)
 
                 svc._latest_runtime_payloads = {"sensor": sensor_payload, "vision": vision_payload, "final": ai_report}
                 ai_runtime = _analysis_runtime_meta(svc)
@@ -1566,8 +1603,23 @@ class DashboardServerHandler(http.server.SimpleHTTPRequestHandler):
                     "sources": _expand_sources(ai_report.get("source_ids", [])),
                     "ai_detailed_report": ai_report,
                 }
-            except Exception:
-                pass
+            except Exception as exc:
+                svc._latest_runtime_payloads = {
+                    "sensor": sensor_payload,
+                    "vision": vision_payload,
+                    "final": {
+                        "degraded_mode": True,
+                        "fallback_reason": f"final_report_exception:{type(exc).__name__}",
+                    },
+                }
+                ai_runtime = _analysis_runtime_meta(svc)
+                report = _build_analysis_report(
+                    sensor_payload=sensor_payload,
+                    vision_payload=vision_payload,
+                    fused_payload=fused,
+                    input_counts=input_counts,
+                    ai_runtime=ai_runtime,
+                )
 
         t_end = time.time()
 
